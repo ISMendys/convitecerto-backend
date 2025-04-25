@@ -7,24 +7,28 @@ Este é o backend da aplicação ConviteCerto, responsável pela lógica da API,
 📁 Estrutura de Pastas
 
 backend/
-├── node_modules/            # Dependências Node.js
-├── prisma/                  # Esquema do banco de dados Prisma
-│   └── schema.prisma
-├── src/
-│   └── routes/              # Rotas da aplicação
-│       ├── auth.routes.js
-│       ├── event.routes.js
-│       ├── guest.routes.js
-│       ├── invite.routes.js
-│       └── whatsapp.routes.js
-├── index.js                 # Arquivo principal da aplicação
-├── db.js                    # Conexão com o banco via Prisma
-├── .env                     # Variáveis de ambiente
-├── combined.log             # Logs combinados (info)
-├── error.log                # Logs de erro
-├── package.json             # Configuração do projeto Node
-├── package-lock.json        # Lockfile de dependências (npm)
-└── yarn.lock                # Lockfile do Yarn
+
+├── combined.log
+
+├── db.js                               
+├── error.log                        
+├── estrutura_back.txt                            
+├── package.json                                            
+├── package-lock.json                                            
+├── prisma                                                  
+│   └── schema.prisma                                                        
+├── src                                                            
+│   ├── index.js                                                                
+│   └── routes                                                      
+│       ├── auth.routes.js                                                          
+│       ├── event.routes.js                                                        
+│       ├── guest.routes.js                                                        
+│       ├── invite.routes.js                                                    
+│       └── whatsapp.routes.js                                                    
+└── yarn.lock                                                  
+
+3 directories, 14 files
+
 
 🚀 Como rodar localmente
 
