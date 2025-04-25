@@ -24,6 +24,13 @@ jobs:
         run: |
           rsync -avz -e "ssh -o StrictHostKeyChecking=no" ./backend/ ubuntu@${{ secrets.EC2_HOST }}:/home/ubuntu/backend/
 
+      - name: Run Prisma Migrate
+        run: |
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+            cd /home/ubuntu/backend
+            npx prisma migrate deploy
+          EOF
+
       - name: Install & Restart Backend on EC2
         run: |
           ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
