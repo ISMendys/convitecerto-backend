@@ -1,0 +1,34 @@
+name: Deploy Backend
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+
+jobs:
+  deploy:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.5.4
+        with:
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
+
+      - name: Upload Backend to EC2
+        run: |
+          rsync -avz -e "ssh -o StrictHostKeyChecking=no" ./backend/ ubuntu@${{ secrets.EC2_HOST }}:/home/ubuntu/backend/
+
+      - name: Install & Restart Backend on EC2
+        run: |
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+            cd /home/ubuntu/backend
+            yarn install
+            npx prisma generate
+            pm2 restart convite-backend || pm2 start src/index.js --name convite-backend
+          EOF
