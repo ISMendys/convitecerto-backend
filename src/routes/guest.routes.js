@@ -15,6 +15,7 @@ const guestSchema = Joi.object({
   notes: Joi.string().allow('', null),
   eventId: Joi.string().required(),
   inviteId: Joi.string().allow(null),
+  imageUrl: Joi.string().allow('', null),
   group: Joi.string().allow('', null),
 });
 
@@ -131,8 +132,8 @@ router.post('/', authenticate, async (req, res) => {
     if (error) {
       return res.status(400).json({ error: error.details[0].message });
     }
-    
-    const { name, email, phone, status, plusOne, plusOneName, notes, eventId, inviteId } = value;
+
+    const { name, email, phone, status, plusOne, plusOneName, whatsapp, group, notes, eventId, imageUrl, inviteId } = value;
     
     // Verificar se o evento existe e pertence ao usuário
     const event = await req.prisma.event.findUnique({
@@ -163,9 +164,12 @@ router.post('/', authenticate, async (req, res) => {
       data: {
         name,
         email,
+        whatsapp,
         phone,
         status,
+        group,
         plusOne,
+        imageUrl,
         plusOneName,
         notes,
         eventId,
@@ -208,7 +212,7 @@ router.put('/:id', authenticate, async (req, res) => {
       return res.status(403).json({ error: 'Acesso negado' });
     }
     
-    const { name, email, phone, status, plusOne, plusOneName, notes, inviteId } = value;
+    const { name, email, phone, status, plusOne, plusOneName, whatsapp, group, notes, eventId, imageUrl, inviteId } = value;
     
     // Verificar se o convite existe e pertence ao evento
     if (inviteId) {
@@ -230,9 +234,12 @@ router.put('/:id', authenticate, async (req, res) => {
       data: {
         name,
         email,
+        whatsapp,
         phone,
         status,
+        group,
         plusOne,
+        imageUrl,
         plusOneName,
         notes,
         inviteId
