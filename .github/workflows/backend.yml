@@ -20,7 +20,7 @@ jobs:
 
       - name: Upload Backend to EC2
         run: |
-          rsync -avz -e "ssh -o StrictHostKeyChecking=no" ./backend/ ubuntu@${{ secrets.EC2_HOST }}:/home/ubuntu/backend/
+          rsync -avz -e "ssh -o StrictHostKeyChecking=no" ./ ubuntu@${{ secrets.EC2_HOST }}:/home/ubuntu/backend/
 
       - name: Run Prisma Migrate
         run: |
