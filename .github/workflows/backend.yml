@@ -35,5 +35,7 @@ jobs:
             cd /home/ubuntu/backend
             yarn install
             npx prisma generate
+            export PATH="$PATH:/home/ubuntu/.yarn/bin"
+            yarn global add pm2
             pm2 restart convite-backend || pm2 start src/index.js --name convite-backend
           EOF
