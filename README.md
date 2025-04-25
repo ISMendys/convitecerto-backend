@@ -5,11 +5,9 @@ ConviteCerto - Backend
 Este é o backend da aplicação ConviteCerto, responsável pela lógica da API, autenticação, gestão de eventos, convidados, convites e integração com WhatsApp.
 
 📁 Estrutura de Pastas
-
+```
 backend/
-
 ├── combined.log
-
 ├── db.js                               
 ├── error.log                        
 ├── estrutura_back.txt                            
@@ -26,26 +24,26 @@ backend/
 │       ├── invite.routes.js                                                    
 │       └── whatsapp.routes.js                                                    
 └── yarn.lock                                                  
-
+```
 3 directories, 14 files
 
 
 🚀 Como rodar localmente
 
 # Instalar dependências
-yarn
+```yarn```
 
 # Criar .env baseado no exemplo (caso exista)
-cp .env.example .env
+```cp .env.example .env```
 
 # Rodar as migrations (Prisma)
-npx prisma migrate dev
+```npx prisma migrate dev```
 
 # Subir o servidor
-yarn start
+```yarn start```
 
 📦 Scripts Disponíveis
-
+```
 yarn start → Inicia a API na porta 5000
 
 yarn dev → Inicia com nodemon (se configurado)
@@ -53,6 +51,7 @@ yarn dev → Inicia com nodemon (se configurado)
 npx prisma studio → Interface visual do banco
 
 npx prisma migrate dev → Aplica as migrations
+```
 
 🌐 Endpoints Principais
 
