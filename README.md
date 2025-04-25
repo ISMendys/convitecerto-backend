@@ -59,11 +59,11 @@ POST   /api/auth       → Login e registro
 
 GET    /api/events     → Listagem de eventos
 
-POST   /api/guests     → Cadastro de convidados
+POST   /api/guests     → Cadastro de convidados, listagem etc..
 
 POST   /api/invites    → Geração de convite
 
-POST   /api/whatsapp   → Envio via WhatsApp
+POST   /api/whatsapp   → Envio via WhatsApp #release
 
 GET    /health         → Verificação de saúde da API
 
