@@ -1,0 +1,89 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  avatar    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  events    Event[]
+}
+
+model Event {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  image       String?
+  date        DateTime
+  location    String?
+  type        String   @default("other") // birthday, wedding, corporate, etc.
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  invites     Invite[]
+  notes        String?
+  maxGuests    String?
+  guests      Guest[]
+}
+
+model Invite {
+  id          String   @id @default(uuid())
+  templateId  String   @default("default")
+  customText  String?
+  title       String?
+  eventTitle  String?
+  imageUrl    String?
+  description String?
+  bgColor     String?  @default("#ffffff")
+  textColor   String?  @default("#000000")
+  accentColor String?  @default("#5e35b1")
+  fontFamily  String?  @default("Poppins")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  eventId     String
+  event       Event    @relation(fields: [eventId], references: [id])
+  guests      Guest[]
+}
+
+model Guest {
+  id           String    @id @default(uuid())
+  name         String
+  email        String?
+  phone        String?
+  status       String    @default("pending") // pending, confirmed, declined
+  plusOne      Boolean   @default(false)
+  plusOneName  String?
+  group        String?
+  whatsapp     Boolean   @default(false)
+  notes        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  eventId      String
+  event        Event     @relation(fields: [eventId], references: [id])
+  inviteId     String?
+  invite       Invite?   @relation(fields: [inviteId], references: [id])
+  messages     Message[]
+}
+
+model Message {
+  id        String   @id @default(uuid())
+  type      String   // invite, reminder, confirmation
+  content   String
+  status    String   // sent, delivered, read, failed
+  sentAt    DateTime @default(now())
+  guestId   String
+  guest     Guest    @relation(fields: [guestId], references: [id])
+}

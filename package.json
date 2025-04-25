@@ -1,0 +1,31 @@
+{
+  "name": "convites-digitais-backend",
+  "version": "1.0.0",
+  "description": "Backend para plataforma de convites digitais com RSVP e integração com WhatsApp",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.6.0",
+    "bcrypt": "^5.1.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.0.3",
+    "express": "^5.1.0",
+    "helmet": "^6.1.5",
+    "joi": "^17.13.3",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
+    "pg": "^8.15.5",
+    "prisma": "^6.6.0",
+    "twilio": "^4.11.0",
+    "winston": "^3.8.2"
+  },
+  "devDependencies": {
+    "jest": "^29.5.0",
+    "nodemon": "^2.0.22",
+    "supertest": "^6.3.3"
+  }
+}
