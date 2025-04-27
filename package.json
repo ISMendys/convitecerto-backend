@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@prisma/client": "^6.6.0",
+    "axios": "^1.6.2",
     "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
     "dotenv": "^16.0.3",
@@ -20,7 +21,6 @@
     "morgan": "^1.10.0",
     "pg": "^8.15.5",
     "prisma": "^6.6.0",
-    "twilio": "^4.11.0",
     "winston": "^3.8.2"
   },
   "devDependencies": {

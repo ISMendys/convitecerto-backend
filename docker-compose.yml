@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./convitecerto-backend
+      dockerfile: Dockerfile
+    container_name: convitecerto_backend
+    restart: always
+    ports:
+      - "5000:5000"
+    env_file:
+      - ./convitecerto-backend/.env # Carrega variáveis do backend
+    environment:
+      # Adiciona/Sobrescreve variáveis para integração com Evolution API
+      EVOLUTION_API_URL: http://evolution_api:8080
+      EVOLUTION_API_KEY: ${AUTHENTICATION_API_KEY:-SUA_CHAVE_API_SECRETA_AQUI} # Usa a chave do .env principal ou um padrão
+      EVOLUTION_INSTANCE_NAME: myinstance # Nome padrão da instância, pode ser ajustado
+      # Garante que o backend use o banco de dados externo configurado no seu .env
+      DATABASE_URL: ${DATABASE_URL}
+    networks:
+      - evolution-net
+    depends_on:
+      - evolution_api # Garante que a API da Evolution inicie antes do backend
+
+  evolution_api:
+    container_name: evolution_api
+    image: atendai/evolution-api:homolog # Ou a versão desejada
+    restart: always
+    depends_on:
+      - redis
+      - postgres
+    ports:
+      - "8080:8080"
+    volumes:
+      - evolution_instances:/evolution/instances
+    networks:
+      - evolution-net
+    env_file:
+      - ./.env # Carrega variáveis da Evolution API
+    expose:
+      - 8080
+
+  redis:
+    image: redis:latest
+    networks:
+      - evolution-net
+    container_name: redis
+    command: >
+      redis-server --port 6379 --appendonly yes
+    volumes:
+      - evolution_redis:/data
+    ports:
+      - "6379:6379"
+
+  postgres:
+    container_name: postgres
+    image: postgres:15
+    networks:
+      - evolution-net
+    command: ["postgres", "-c", "max_connections=1000", "-c", "listen_addresses=*"]
+    restart: always
+    ports:
+      - "5432:5432"
+    environment:
+      # Estas credenciais são para o banco de dados INTERNO da Evolution API
+      POSTGRES_USER: ${POSTGRES_USER:-user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pass}
+      POSTGRES_DB: ${POSTGRES_DB:-evolution}
+      POSTGRES_HOST_AUTH_METHOD: trust # Simplifica a conexão local
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    expose:
+      - 5432
+
+volumes:
+  evolution_instances:
+  evolution_redis:
+  postgres_data:
+
+networks:
+  evolution-net:
+    name: evolution-net
+    driver: bridge
+
