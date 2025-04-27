@@ -1,392 +1,407 @@
 const express = require('express');
-const { authenticate } = require('./auth.routes');
-const Joi = require('joi');
 const router = express.Router();
+const auth = require('../middleware/auth');
+const Guest = require('../models/Guest');
+const Event = require('../models/Event');
+const Invite = require('../models/Invite');
+const RsvpHistory = require('../models/RsvpHistory');
 
-// Esquema de validação para criação/atualização de convidado
-const guestSchema = Joi.object({
-  name: Joi.string().required(),
-  email: Joi.string().email().allow('', null),
-  phone: Joi.string().allow('', null),
-  status: Joi.string().valid('pending', 'confirmed', 'declined').default('pending'),
-  whatsapp: Joi.boolean().default(false),
-  plusOne: Joi.boolean().default(false),
-  plusOneName: Joi.string().allow('', null),
-  notes: Joi.string().allow('', null),
-  eventId: Joi.string().required(),
-  inviteId: Joi.string().allow(null),
-  imageUrl: Joi.string().allow('', null),
-  group: Joi.string().allow('', null),
-});
-
-// Esquema de validação para atualização de status (RSVP)
-const rsvpSchema = Joi.object({
-  status: Joi.string().valid('confirmed', 'declined').required(),
-  plusOne: Joi.boolean(),
-  plusOneName: Joi.string().allow('', null)
-});
-
-// Listar todos os convidados de um evento
-router.get('/event/:eventId', authenticate, async (req, res) => {
+// @route   GET api/guests
+// @desc    Get all guests
+// @access  Private
+router.get('/', auth, async (req, res) => {
   try {
-    const { eventId } = req.params;
-    
-    // Verificar se o evento existe e pertence ao usuário
-    const event = await req.prisma.event.findUnique({
-      where: { id: eventId }
-    });
+    const guests = await Guest.find({ user: req.user.id });
+    res.json(guests);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Erro no servidor');
+  }
+});
+
+// @route   GET api/guests/event/:eventId
+// @desc    Get all guests for an event
+// @access  Private
+router.get('/event/:eventId', auth, async (req, res) => {
+  try {
+    const event = await Event.findById(req.params.eventId);
     
     if (!event) {
       return res.status(404).json({ error: 'Evento não encontrado' });
     }
     
-    if (event.userId !== req.user.id) {
-      return res.status(403).json({ error: 'Acesso negado' });
+    // Verificar se o evento pertence ao usuário
+    if (event.user.toString() !== req.user.id) {
+      return res.status(401).json({ error: 'Não autorizado' });
     }
     
-    const guests = await req.prisma.guest.findMany({
-      where: {
-        eventId
-      },
-      orderBy: {
-        name: 'asc'
-      }
-    });
-    
-    res.status(200).json(guests);
-  } catch (error) {
-    req.logger.error('Erro ao listar convidados:', error);
-    res.status(500).json({ error: 'Erro ao listar convidados' });
+    const guests = await Guest.find({ eventId: req.params.eventId });
+    res.json(guests);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Erro no servidor');
   }
 });
 
-// Obter um convidado específico
-router.get('/:id', authenticate, async (req, res) => {
+// @route   GET api/guests/:id
+// @desc    Get guest by ID
+// @access  Public (para permitir acesso pela página de RSVP)
+router.get('/:id', async (req, res) => {
   try {
-    const { id } = req.params;
-    
-    const guest = await req.prisma.guest.findUnique({
-      where: {
-        id
-      },
-      include: {
-        event: true,
-        messages: true
-      }
-    });
+    const guest = await Guest.findById(req.params.id);
     
     if (!guest) {
       return res.status(404).json({ error: 'Convidado não encontrado' });
     }
     
-    // Verificar se o convidado pertence a um evento do usuário
-    if (guest.event.userId !== req.user.id) {
-      return res.status(403).json({ error: 'Acesso negado' });
-    }
+    res.json(guest);
+  } catch (err) {
+    console.error(err.message);
     
-    res.status(200).json(guest);
-  } catch (error) {
-    req.logger.error('Erro ao obter convidado:', error);
-    res.status(500).json({ error: 'Erro ao obter convidado' });
-  }
-});
-
-// Obter mensagens de um convidado específico
-router.get('/:id/messages', authenticate, async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    // Verificar se o convidado existe
-    const guest = await req.prisma.guest.findUnique({
-      where: { id },
-      include: { event: true }
-    });
-    
-    if (!guest) {
+    if (err.kind === 'ObjectId') {
       return res.status(404).json({ error: 'Convidado não encontrado' });
     }
     
-    // Verificar se o convidado pertence a um evento do usuário
-    if (guest.event.userId !== req.user.id) {
-      return res.status(403).json({ error: 'Acesso negado' });
-    }
-    
-    // Buscar mensagens do convidado
-    const messages = await req.prisma.message.findMany({
-      where: { guestId: id },
-      orderBy: { createdAt: 'desc' }
-    });
-    
-    res.status(200).json(messages);
-  } catch (error) {
-    req.logger.error('Erro ao obter mensagens do convidado:', error);
-    res.status(500).json({ error: 'Erro ao obter mensagens do convidado' });
+    res.status(500).send('Erro no servidor');
   }
 });
 
-// Adicionar um novo convidado
-router.post('/', authenticate, async (req, res) => {
+// @route   POST api/guests
+// @desc    Create a guest
+// @access  Private
+router.post('/', auth, async (req, res) => {
   try {
-    // Validar dados de entrada
-    const { error, value } = guestSchema.validate(req.body);
-    if (error) {
-      return res.status(400).json({ error: error.details[0].message });
-    }
-
-    const { name, email, phone, status, plusOne, plusOneName, whatsapp, group, notes, eventId, imageUrl, inviteId } = value;
+    const { name, email, phone, whatsapp, status, plusOne, plusOneName, notes, group, imageUrl, eventId, inviteId } = req.body;
     
     // Verificar se o evento existe e pertence ao usuário
-    const event = await req.prisma.event.findUnique({
-      where: { id: eventId }
-    });
+    const event = await Event.findById(eventId);
     
     if (!event) {
       return res.status(404).json({ error: 'Evento não encontrado' });
     }
     
-    if (event.userId !== req.user.id) {
-      return res.status(403).json({ error: 'Acesso negado' });
+    if (event.user.toString() !== req.user.id) {
+      return res.status(401).json({ error: 'Não autorizado' });
     }
     
-    // Verificar se o convite existe e pertence ao evento
+    // Verificar se o convite existe e pertence ao evento (se fornecido)
     if (inviteId) {
-      const invite = await req.prisma.invite.findUnique({
-        where: { id: inviteId }
-      });
+      const invite = await Invite.findById(inviteId);
       
-      if (!invite || invite.eventId !== eventId) {
-        return res.status(400).json({ error: 'Convite inválido para este evento' });
+      if (!invite) {
+        return res.status(404).json({ error: 'Convite não encontrado' });
+      }
+      
+      if (invite.eventId.toString() !== eventId) {
+        return res.status(400).json({ error: 'O convite não pertence a este evento' });
       }
     }
     
-    // Criar convidado
-    const guest = await req.prisma.guest.create({
-      data: {
-        name,
-        email,
-        whatsapp,
-        phone,
-        status,
-        group,
-        plusOne,
-        imageUrl,
-        plusOneName,
-        notes,
-        eventId,
-        inviteId
-      }
+    // Criar novo convidado
+    const newGuest = new Guest({
+      name,
+      email,
+      phone,
+      whatsapp,
+      status,
+      plusOne,
+      plusOneName,
+      notes,
+      group,
+      imageUrl,
+      eventId,
+      inviteId,
+      user: req.user.id
     });
     
-    res.status(201).json(guest);
-  } catch (error) {
-    req.logger.error('Erro ao adicionar convidado:', error);
-    res.status(500).json({ error: 'Erro ao adicionar convidado' });
+    const guest = await newGuest.save();
+    
+    // Criar registro inicial no histórico de RSVP
+    const newRsvpHistory = new RsvpHistory({
+      guestId: guest._id,
+      status,
+      message: 'Convidado criado',
+      timestamp: Date.now()
+    });
+    
+    await newRsvpHistory.save();
+    
+    res.json(guest);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Erro no servidor');
   }
 });
 
-// Atualizar um convidado
-router.put('/:id', authenticate, async (req, res) => {
+// @route   PUT api/guests/:id
+// @desc    Update a guest
+// @access  Private
+router.put('/:id', auth, async (req, res) => {
   try {
-    const { id } = req.params;
-    
-    // Validar dados de entrada
-    const { error, value } = guestSchema.validate(req.body);
-    if (error) {
-      return res.status(400).json({ error: error.details[0].message });
-    }
+    const { name, email, phone, whatsapp, status, plusOne, plusOneName, notes, group, imageUrl, inviteId } = req.body;
     
     // Verificar se o convidado existe
-    const existingGuest = await req.prisma.guest.findUnique({
-      where: { id },
-      include: {
-        event: true
-      }
-    });
+    let guest = await Guest.findById(req.params.id);
     
-    if (!existingGuest) {
+    if (!guest) {
       return res.status(404).json({ error: 'Convidado não encontrado' });
     }
     
-    // Verificar se o convidado pertence a um evento do usuário
-    if (existingGuest.event.userId !== req.user.id) {
-      return res.status(403).json({ error: 'Acesso negado' });
+    // Verificar se o evento pertence ao usuário
+    const event = await Event.findById(guest.eventId);
+    
+    if (!event) {
+      return res.status(404).json({ error: 'Evento não encontrado' });
     }
     
-    const { name, email, phone, status, plusOne, plusOneName, whatsapp, group, notes, eventId, imageUrl, inviteId } = value;
+    if (event.user.toString() !== req.user.id) {
+      return res.status(401).json({ error: 'Não autorizado' });
+    }
     
-    // Verificar se o convite existe e pertence ao evento
+    // Verificar se o convite existe e pertence ao evento (se fornecido)
     if (inviteId) {
-      const invite = await req.prisma.invite.findUnique({
-        where: { id: inviteId }
-      });
+      const invite = await Invite.findById(inviteId);
       
-      if (!invite || invite.eventId !== existingGuest.eventId) {
-        return res.status(400).json({ error: 'Convite inválido para este evento' });
+      if (!invite) {
+        return res.status(404).json({ error: 'Convite não encontrado' });
+      }
+      
+      if (invite.eventId.toString() !== guest.eventId.toString()) {
+        return res.status(400).json({ error: 'O convite não pertence a este evento' });
       }
     }
     
-    // Verificar se o status está sendo alterado
-    const statusChanged = existingGuest.status !== status;
+    // Verificar se o status mudou
+    const statusChanged = status && status !== guest.status;
     
     // Atualizar convidado
-    const updatedGuest = await req.prisma.guest.update({
-      where: { id },
-      data: {
-        name,
-        email,
-        whatsapp,
-        phone,
-        status,
-        group,
-        plusOne,
-        imageUrl,
-        plusOneName,
-        notes,
-        inviteId
-      }
-    });
+    guest = await Guest.findByIdAndUpdate(
+      req.params.id,
+      { 
+        name: name || guest.name,
+        email: email !== undefined ? email : guest.email,
+        phone: phone !== undefined ? phone : guest.phone,
+        whatsapp: whatsapp !== undefined ? whatsapp : guest.whatsapp,
+        status: status || guest.status,
+        plusOne: plusOne !== undefined ? plusOne : guest.plusOne,
+        plusOneName: plusOneName !== undefined ? plusOneName : guest.plusOneName,
+        notes: notes !== undefined ? notes : guest.notes,
+        group: group || guest.group,
+        imageUrl: imageUrl !== undefined ? imageUrl : guest.imageUrl,
+        inviteId: inviteId !== undefined ? inviteId : guest.inviteId
+      },
+      { new: true }
+    );
     
-    // Se o status foi alterado, registrar uma mensagem
+    // Se o status mudou, criar um novo registro no histórico de RSVP
     if (statusChanged) {
-      await req.prisma.message.create({
-        data: {
-          type: 'status_change',
-          content: `Status atualizado para: ${status} (pelo organizador)`,
-          status: 'sent',
-          guestId: id
-        }
+      const newRsvpHistory = new RsvpHistory({
+        guestId: guest._id,
+        status,
+        message: 'Status atualizado pelo organizador',
+        timestamp: Date.now()
       });
+      
+      await newRsvpHistory.save();
     }
     
-    res.status(200).json(updatedGuest);
-  } catch (error) {
-    req.logger.error('Erro ao atualizar convidado:', error);
-    res.status(500).json({ error: 'Erro ao atualizar convidado' });
-  }
-});
-
-// Excluir um convidado
-router.delete('/:id', authenticate, async (req, res) => {
-  try {
-    const { id } = req.params;
+    res.json(guest);
+  } catch (err) {
+    console.error(err.message);
     
-    // Verificar se o convidado existe
-    const existingGuest = await req.prisma.guest.findUnique({
-      where: { id },
-      include: {
-        event: true
-      }
-    });
-    
-    if (!existingGuest) {
+    if (err.kind === 'ObjectId') {
       return res.status(404).json({ error: 'Convidado não encontrado' });
     }
     
-    // Verificar se o convidado pertence a um evento do usuário
-    if (existingGuest.event.userId !== req.user.id) {
-      return res.status(403).json({ error: 'Acesso negado' });
+    res.status(500).send('Erro no servidor');
+  }
+});
+
+// @route   DELETE api/guests/:id
+// @desc    Delete a guest
+// @access  Private
+router.delete('/:id', auth, async (req, res) => {
+  try {
+    // Verificar se o convidado existe
+    const guest = await Guest.findById(req.params.id);
+    
+    if (!guest) {
+      return res.status(404).json({ error: 'Convidado não encontrado' });
+    }
+    
+    // Verificar se o evento pertence ao usuário
+    const event = await Event.findById(guest.eventId);
+    
+    if (!event) {
+      return res.status(404).json({ error: 'Evento não encontrado' });
+    }
+    
+    if (event.user.toString() !== req.user.id) {
+      return res.status(401).json({ error: 'Não autorizado' });
     }
     
     // Excluir convidado
-    await req.prisma.guest.delete({
-      where: { id }
-    });
+    await Guest.findByIdAndRemove(req.params.id);
     
-    res.status(204).send();
-  } catch (error) {
-    req.logger.error('Erro ao excluir convidado:', error);
-    res.status(500).json({ error: 'Erro ao excluir convidado' });
+    // Excluir histórico de RSVP
+    await RsvpHistory.deleteMany({ guestId: req.params.id });
+    
+    res.json({ msg: 'Convidado removido' });
+  } catch (err) {
+    console.error(err.message);
+    
+    if (err.kind === 'ObjectId') {
+      return res.status(404).json({ error: 'Convidado não encontrado' });
+    }
+    
+    res.status(500).send('Erro no servidor');
   }
 });
 
-// Importar múltiplos convidados
-router.post('/import', authenticate, async (req, res) => {
+// @route   PUT api/guests/:id/status
+// @desc    Update guest status (RSVP)
+// @access  Public (para permitir acesso pela página de RSVP)
+router.put('/:id/status', async (req, res) => {
   try {
-    const { guests, eventId } = req.body;
-    
-    if (!Array.isArray(guests) || guests.length === 0) {
-      return res.status(400).json({ error: 'Lista de convidados inválida' });
-    }
-    
-    // Verificar se o evento existe e pertence ao usuário
-    const event = await req.prisma.event.findUnique({
-      where: { id: eventId }
-    });
-    
-    if (!event) {
-      return res.status(404).json({ error: 'Evento não encontrado' });
-    }
-    
-    if (event.userId !== req.user.id) {
-      return res.status(403).json({ error: 'Acesso negado' });
-    }
-    
-    // Criar convidados em lote
-    const createdGuests = await req.prisma.guest.createMany({
-      data: guests.map(guest => ({
-        name: guest.name,
-        email: guest.email || null,
-        phone: guest.phone || null,
-        status: 'pending',
-        eventId
-      })),
-      skipDuplicates: true
-    });
-    
-    res.status(201).json({ count: createdGuests.count });
-  } catch (error) {
-    req.logger.error('Erro ao importar convidados:', error);
-    res.status(500).json({ error: 'Erro ao importar convidados' });
-  }
-});
-
-// Rota pública para RSVP (confirmação de presença)
-router.post('/rsvp/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    // Validar dados de entrada
-    const { error, value } = rsvpSchema.validate(req.body);
-    if (error) {
-      return res.status(400).json({ error: error.details[0].message });
-    }
-    
-    const { status, plusOne, plusOneName } = value;
+    const { status, message } = req.body;
     
     // Verificar se o convidado existe
-    const guest = await req.prisma.guest.findUnique({
-      where: { id }
-    });
+    let guest = await Guest.findById(req.params.id);
     
     if (!guest) {
       return res.status(404).json({ error: 'Convidado não encontrado' });
     }
     
     // Atualizar status do convidado
-    const updatedGuest = await req.prisma.guest.update({
-      where: { id },
-      data: {
-        status,
-        plusOne: plusOne !== undefined ? plusOne : guest.plusOne,
-        plusOneName: plusOneName !== undefined ? plusOneName : guest.plusOneName
-      }
+    guest = await Guest.findByIdAndUpdate(
+      req.params.id,
+      { status },
+      { new: true }
+    );
+    
+    // Criar novo registro no histórico de RSVP
+    const newRsvpHistory = new RsvpHistory({
+      guestId: guest._id,
+      status,
+      message: message || 'Status atualizado pelo convidado',
+      timestamp: Date.now()
     });
     
-    // Registrar mensagem de confirmação
-    await req.prisma.message.create({
-      data: {
-        type: 'confirmation',
-        content: `Status atualizado para: ${status}`,
-        status: 'sent',
-        guestId: id
-      }
-    });
+    await newRsvpHistory.save();
     
-    res.status(200).json(updatedGuest);
-  } catch (error) {
-    req.logger.error('Erro ao processar RSVP:', error);
-    res.status(500).json({ error: 'Erro ao processar confirmação' });
+    res.json(guest);
+  } catch (err) {
+    console.error(err.message);
+    
+    if (err.kind === 'ObjectId') {
+      return res.status(404).json({ error: 'Convidado não encontrado' });
+    }
+    
+    res.status(500).send('Erro no servidor');
   }
 });
 
-module.exports = { router };
+// @route   GET api/guests/:id/rsvp-history
+// @desc    Get RSVP history for a guest
+// @access  Private
+router.get('/:id/rsvp-history', auth, async (req, res) => {
+  try {
+    // Verificar se o convidado existe
+    const guest = await Guest.findById(req.params.id);
+    
+    if (!guest) {
+      return res.status(404).json({ error: 'Convidado não encontrado' });
+    }
+    
+    // Verificar se o evento pertence ao usuário
+    const event = await Event.findById(guest.eventId);
+    
+    if (!event) {
+      return res.status(404).json({ error: 'Evento não encontrado' });
+    }
+    
+    if (event.user.toString() !== req.user.id) {
+      return res.status(401).json({ error: 'Não autorizado' });
+    }
+    
+    // Buscar histórico de RSVP
+    const rsvpHistory = await RsvpHistory.find({ guestId: req.params.id }).sort({ timestamp: -1 });
+    
+    res.json(rsvpHistory);
+  } catch (err) {
+    console.error(err.message);
+    
+    if (err.kind === 'ObjectId') {
+      return res.status(404).json({ error: 'Convidado não encontrado' });
+    }
+    
+    res.status(500).send('Erro no servidor');
+  }
+});
+
+// @route   POST api/guests/link-invite
+// @desc    Link multiple guests to an invite
+// @access  Private
+router.post('/link-invite', auth, async (req, res) => {
+  try {
+    const { inviteId, guestIds } = req.body;
+    
+    if (!inviteId || !guestIds || !Array.isArray(guestIds) || guestIds.length === 0) {
+      return res.status(400).json({ error: 'Dados inválidos' });
+    }
+    
+    // Verificar se o convite existe
+    const invite = await Invite.findById(inviteId);
+    
+    if (!invite) {
+      return res.status(404).json({ error: 'Convite não encontrado' });
+    }
+    
+    // Verificar se o evento pertence ao usuário
+    const event = await Event.findById(invite.eventId);
+    
+    if (!event) {
+      return res.status(404).json({ error: 'Evento não encontrado' });
+    }
+    
+    if (event.user.toString() !== req.user.id) {
+      return res.status(401).json({ error: 'Não autorizado' });
+    }
+    
+    // Atualizar cada convidado
+    const updatedGuests = [];
+    
+    for (const guestId of guestIds) {
+      // Verificar se o convidado existe
+      const guest = await Guest.findById(guestId);
+      
+      if (!guest) {
+        continue; // Pular convidados que não existem
+      }
+      
+      // Verificar se o convidado pertence ao mesmo evento que o convite
+      if (guest.eventId.toString() !== invite.eventId.toString()) {
+        continue; // Pular convidados de outros eventos
+      }
+      
+      // Atualizar convidado
+      const updatedGuest = await Guest.findByIdAndUpdate(
+        guestId,
+        { inviteId },
+        { new: true }
+      );
+      
+      updatedGuests.push(updatedGuest);
+    }
+    
+    res.json({
+      message: `${updatedGuests.length} convidados vinculados ao convite com sucesso`,
+      guests: updatedGuests
+    });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Erro no servidor');
+  }
+});
+
+module.exports = router;
