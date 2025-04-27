@@ -20,44 +20,50 @@ jobs:
 
       - name: Upload Project Files to EC2
         run: |
-          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} "mkdir -p ./"
-          # Envia os arquivos necessários para o Docker Compose
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} "mkdir -p /home/ubuntu/backend"
+
           rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" \
             ./docker-compose.yml \
-            ./.env \
-            ./convitecerto-backend/ \
-            ubuntu@${{ secrets.EC2_HOST }}:.//
+            ./package.json \
+            ./package-lock.json \
+            ./yarn.lock \
+            ./README.md \
+            ./db.js \
+            ./estrutura_back.txt \
+            ./prisma/ \
+            ./src/ \
+            ubuntu@${{ secrets.EC2_HOST }}:/home/ubuntu/backend/
 
-      - name: Create .env files on EC2 using Secrets
+      - name: Create .env file on EC2 using Secrets
         run: |
           ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << EOF
-            # Cria o .env da Evolution API (raiz)
-            echo "SERVER_TYPE=http" > .//.env
-            echo "SERVER_PORT=8080" >> .//.env
-            echo "SERVER_URL=http://localhost:8080" >> .//.env
-            echo "DATABASE_PROVIDER=postgresql" >> .//.env
-            echo "DATABASE_CONNECTION_URI='postgresql://user:pass@postgres:5432/evolution?schema=public'" >> .//.env
-            echo "AUTHENTICATION_API_KEY=\"${{ secrets.EVOLUTION_API_KEY }}\"" >> .//.env
-            echo "WEBHOOK_GLOBAL_ENABLED=true" >> .//.env
-            echo "WEBHOOK_GLOBAL_URL='https://${{ secrets.APP_DOMAIN }}/api/whatsapp/webhook'" >> .//.env
-            echo "WEBHOOK_EVENTS_MESSAGES_UPSERT=true" >> .//.env
-            echo "CACHE_REDIS_ENABLED=true" >> .//.env
-            echo "CACHE_REDIS_URI=redis://redis:6379/6" >> .//.env
+            # Cria o .env no diretório backend
+            echo "SERVER_TYPE=http" > /home/ubuntu/backend/.env
+            echo "SERVER_PORT=8080" >> /home/ubuntu/backend/.env
+            echo "SERVER_URL=http://localhost:8080" >> /home/ubuntu/backend/.env
+            echo "DATABASE_PROVIDER=postgresql" >> /home/ubuntu/backend/.env
+            echo "DATABASE_CONNECTION_URI='postgresql://user:pass@postgres:5432/evolution?schema=public'" >> /home/ubuntu/backend/.env
+            echo "AUTHENTICATION_API_KEY=\"${{ secrets.EVOLUTION_API_KEY }}\"" >> /home/ubuntu/backend/.env
+            echo "WEBHOOK_GLOBAL_ENABLED=true" >> /home/ubuntu/backend/.env
+            echo "WEBHOOK_GLOBAL_URL='https://${{ secrets.APP_DOMAIN }}/api/whatsapp/webhook'" >> /home/ubuntu/backend/.env
+            echo "WEBHOOK_EVENTS_MESSAGES_UPSERT=true" >> /home/ubuntu/backend/.env
+            echo "CACHE_REDIS_ENABLED=true" >> /home/ubuntu/backend/.env
+            echo "CACHE_REDIS_URI=redis://redis:6379/6" >> /home/ubuntu/backend/.env
 
-            # Cria o .env do Backend
-            echo "DATABASE_URL=\"${{ secrets.DATABASE_URL }}\"" > .//convitecerto-backend/.env
-            echo "JWT_SECRET=\"${{ secrets.JWT_SECRET }}\"" >> .//convitecerto-backend/.env
-            echo "EVOLUTION_API_URL=\"http://evolution_api:8080\"" >> .//convitecerto-backend/.env
-            echo "EVOLUTION_API_KEY=\"${{ secrets.EVOLUTION_API_KEY }}\"" >> .//convitecerto-backend/.env
-            echo "EVOLUTION_INSTANCE_NAME=\"myinstance\"" >> .//convitecerto-backend/.env
+            # Cria também as variáveis específicas do backend
+            echo "DATABASE_URL=\"${{ secrets.DATABASE_URL }}\"" >> /home/ubuntu/backend/.env
+            echo "JWT_SECRET=\"${{ secrets.JWT_SECRET }}\"" >> /home/ubuntu/backend/.env
+            echo "EVOLUTION_API_URL=\"http://evolution_api:8080\"" >> /home/ubuntu/backend/.env
+            echo "EVOLUTION_API_KEY=\"${{ secrets.EVOLUTION_API_KEY }}\"" >> /home/ubuntu/backend/.env
+            echo "EVOLUTION_INSTANCE_NAME=\"myinstance\"" >> /home/ubuntu/backend/.env
           EOF
 
       - name: Deploy with Docker Compose
         run: |
           ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << EOF
-            cd ./
+            cd /home/ubuntu/backend
             
-            # Instala Docker e Docker Compose se ainda não estiverem instalados
+            # Instala Docker e Docker Compose se não estiverem instalados
             if ! command -v docker &> /dev/null; then
               echo "Instalando Docker..."
               curl -fsSL https://get.docker.com -o get-docker.sh
@@ -70,26 +76,24 @@ jobs:
               sudo curl -L "https://github.com/docker/compose/releases/download/v2.20.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
               sudo chmod +x /usr/local/bin/docker-compose
             fi
-            
+
             # Executa o Docker Compose
             docker-compose down
             docker-compose up -d
-            
-            # Executa as migrações do Prisma
+
+            # Executa as migrações do Prisma (com backend rodando no container)
             docker-compose exec -T backend npx prisma migrate deploy
           EOF
 
       - name: Verify Deployment
         run: |
           ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << EOF
-            cd ./
-            
-            # Verifica se os contêineres estão rodando
+            cd /home/ubuntu/backend
+
+            # Verifica contêineres
             docker-compose ps
-            
-            # Verifica os logs do backend
+
+            # Logs dos containers
             docker-compose logs --tail=20 backend
-            
-            # Verifica os logs da Evolution API
             docker-compose logs --tail=20 evolution_api
           EOF
