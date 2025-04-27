@@ -25,6 +25,7 @@ jobs:
           rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" \
             ./docker-compose.yml \
             ./package.json \
+            ./Dockerfile \ 
             ./package-lock.json \
             ./yarn.lock \
             ./README.md \
