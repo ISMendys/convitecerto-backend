@@ -3,29 +3,27 @@ version: '3.8'
 services:
   backend:
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile
     container_name: convitecerto_backend
     restart: always
     ports:
       - "5000:5000"
     env_file:
-      - ./backend/.env # Carrega variáveis do backend
+      - ./.env
     environment:
-      # Adiciona/Sobrescreve variáveis para integração com Evolution API
       EVOLUTION_API_URL: http://evolution_api:8080
-      EVOLUTION_API_KEY: ${AUTHENTICATION_API_KEY:-SUA_CHAVE_API_SECRETA_AQUI} # Usa a chave do .env principal ou um padrão
-      EVOLUTION_INSTANCE_NAME: myinstance # Nome padrão da instância, pode ser ajustado
-      # Garante que o backend use o banco de dados externo configurado no seu .env
+      EVOLUTION_API_KEY: ${AUTHENTICATION_API_KEY:-SUA_CHAVE_API_SECRETA_AQUI}
+      EVOLUTION_INSTANCE_NAME: myinstance
       DATABASE_URL: ${DATABASE_URL}
     networks:
       - evolution-net
     depends_on:
-      - evolution_api # Garante que a API da Evolution inicie antes do backend
+      - evolution_api
 
   evolution_api:
     container_name: evolution_api
-    image: atendai/evolution-api:homolog # Ou a versão desejada
+    image: atendai/evolution-api:homolog
     restart: always
     depends_on:
       - redis
@@ -37,7 +35,7 @@ services:
     networks:
       - evolution-net
     env_file:
-      - ./.env # Carrega variáveis da Evolution API
+      - ./.env
     expose:
       - 8080
 
@@ -63,11 +61,10 @@ services:
     ports:
       - "5432:5432"
     environment:
-      # Estas credenciais são para o banco de dados INTERNO da Evolution API
       POSTGRES_USER: ${POSTGRES_USER:-user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pass}
       POSTGRES_DB: ${POSTGRES_DB:-evolution}
-      POSTGRES_HOST_AUTH_METHOD: trust # Simplifica a conexão local
+      POSTGRES_HOST_AUTH_METHOD: trust
     volumes:
       - postgres_data:/var/lib/postgresql/data
     expose:
@@ -82,4 +79,3 @@ networks:
   evolution-net:
     name: evolution-net
     driver: bridge
-
