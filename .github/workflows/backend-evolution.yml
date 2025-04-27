@@ -29,7 +29,6 @@ jobs:
             ./docker-compose.yml \
             ./package.json \
             ./Dockerfile \ 
-            ./package-lock.json \
             ./yarn.lock \
             ./README.md \
             ./db.js \
