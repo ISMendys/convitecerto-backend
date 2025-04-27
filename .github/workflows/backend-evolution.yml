@@ -20,7 +20,6 @@ jobs:
 
       - name: Upload Project Files to EC2
         run: |
-          # Cria o diretório de destino se não existir
           ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} "mkdir -p /home/ubuntu/backend"
           # Envia os arquivos necessários para o Docker Compose
           rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" \
