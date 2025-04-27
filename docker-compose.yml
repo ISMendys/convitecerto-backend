@@ -3,14 +3,14 @@ version: '3.8'
 services:
   backend:
     build:
-      context: ./convitecerto-backend
+      context: ./backend
       dockerfile: Dockerfile
     container_name: convitecerto_backend
     restart: always
     ports:
       - "5000:5000"
     env_file:
-      - ./convitecerto-backend/.env # Carrega variáveis do backend
+      - ./backend/.env # Carrega variáveis do backend
     environment:
       # Adiciona/Sobrescreve variáveis para integração com Evolution API
       EVOLUTION_API_URL: http://evolution_api:8080
