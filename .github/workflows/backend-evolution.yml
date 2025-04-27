@@ -21,7 +21,7 @@ jobs:
       - name: Upload Project Files to EC2
         run: |
           ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} "mkdir -p /home/ubuntu/backend"
-
+          chmod -R u+rw .
           rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" \
             ./docker-compose.yml \
             ./package.json \
