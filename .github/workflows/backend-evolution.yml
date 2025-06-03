@@ -28,7 +28,7 @@ jobs:
         run: |
           # Ensure the target directory exists on the VM or create it in a prior step if necessary.
           # Example: ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.CONTABO_HOST }} "mkdir -p /home/ubuntu/backend/"
-          rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no -p 22" \
+          rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no -p 22486" \
             --include='docker-compose.yml' \
             --include='Dockerfile' \
             --include='package.json' \
@@ -43,7 +43,7 @@ jobs:
 
       - name: Create .env file on Contabo VM using Secrets
         run: |
-          ssh -o StrictHostKeyChecking=no -p 22 ubuntu@${{ secrets.CONTABO_HOST }} << EOF
+          ssh -o StrictHostKeyChecking=no -p 22486 ubuntu@${{ secrets.CONTABO_HOST }} << EOF
             # Ensure the target directory exists
             mkdir -p /home/ubuntu/backend
             # Create or overwrite the .env file in the backend directory
@@ -69,7 +69,7 @@ jobs:
 
       - name: Deploy with Docker Compose on Contabo VM
         run: |
-          ssh -o StrictHostKeyChecking=no -p 22 ubuntu@${{ secrets.CONTABO_HOST }} << EOF
+          ssh -o StrictHostKeyChecking=no -p 22486 ubuntu@${{ secrets.CONTABO_HOST }} << EOF
             cd /home/ubuntu/backend
             
             # Ensure Docker and Docker Compose are installed
