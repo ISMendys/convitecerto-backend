@@ -51,7 +51,7 @@ jobs:
             echo "SERVER_PORT=8080" >> /home/admin/backend/.env
             echo "SERVER_URL=http://localhost:8080" >> /home/admin/backend/.env # Consider if this should be your domain
             echo "DATABASE_PROVIDER=postgresql" >> /home/admin/backend/.env
-            echo "DATABASE_CONNECTION_URI='postgresql://user:pass@postgres:5432/evolution?schema=public'" >> /home/admin/backend/.env # Ensure 'user:pass' are correct or use secrets
+            echo "DATABASE_CONNECTION_URI='postgresql://user:pass@postgres:5432/evolution?schema=evolution_api_schema'" >> /home/admin/backend/.env # Ensure 'user:pass' are correct or use secrets
             echo "AUTHENTICATION_API_KEY=\"${{ secrets.EVOLUTION_API_KEY }}\"" >> /home/admin/backend/.env
             echo "WEBHOOK_GLOBAL_ENABLED=true" >> /home/admin/backend/.env
             echo "WEBHOOK_GLOBAL_URL='https://${{ secrets.APP_DOMAIN }}/api/whatsapp/webhook'" >> /home/admin/backend/.env
