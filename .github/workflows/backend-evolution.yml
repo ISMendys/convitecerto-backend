@@ -22,10 +22,11 @@ jobs:
       - name: Setup SSH for Contabo VM
         uses: webfactory/ssh-agent@v0.5.4
         with:
-          ssh-private-key: ${{ secrets.CONTABO_SSH_KEY }}
+          ssh-private-key: ${{ secrets.CONTABO_SSH_KEY }} 
 
       - name: Upload Project Files to Contabo VM
         run: |
+          # Using 'admin' user as per recent logs
           # Ensure the target directory exists on the VM or create it in a prior step if necessary.
           # Example: ssh -o StrictHostKeyChecking=no -p 22486 admin@${{ secrets.CONTABO_HOST }} "mkdir -p /home/admin/backend/"
           rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no -p 22486" \
@@ -39,19 +40,22 @@ jobs:
             --include='prisma/***' \
             --include='src/***' \
             --exclude='*' \
-            ./ admin@${{ secrets.CONTABO_HOST }}:/home/admin/backend/ # IMPORTANT: Use CONTABO_HOST secret and verify username/path
+            ./ admin@${{ secrets.CONTABO_HOST }}:/home/admin/backend/ # Using admin user and assuming /home/admin/backend
 
       - name: Create .env file on Contabo VM using Secrets
         run: |
+          # Using 'admin' user
           ssh -o StrictHostKeyChecking=no -p 22486 admin@${{ secrets.CONTABO_HOST }} << EOF
             # Ensure the target directory exists
-            mkdir -p /home/admin/backend
+            mkdir -p /home/admin/backend # Assuming /home/admin/backend
             # Create or overwrite the .env file in the backend directory
             echo "SERVER_TYPE=http" > /home/admin/backend/.env
-            echo "SERVER_PORT=8080" >> /home/admin/backend/.env
-            echo "SERVER_URL=http://localhost:8080" >> /home/admin/backend/.env # Consider if this should be your domain
+            echo "SERVER_PORT=8080" >> /home/admin/backend/.env 
+            echo "SERVER_URL=http://localhost:8080" >> /home/admin/backend/.env 
+
             echo "DATABASE_PROVIDER=postgresql" >> /home/admin/backend/.env
-            echo "DATABASE_CONNECTION_URI='postgresql://user:pass@postgres:5432/evolution?schema=evolution_api_schema'" >> /home/admin/backend/.env # Ensure 'user:pass' are correct or use secrets
+            echo "DATABASE_CONNECTION_URI='postgresql://user:pass@postgres:5432/evolution?schema=public'" >> /home/admin/backend/.env
+
             echo "AUTHENTICATION_API_KEY=\"${{ secrets.EVOLUTION_API_KEY }}\"" >> /home/admin/backend/.env
             echo "WEBHOOK_GLOBAL_ENABLED=true" >> /home/admin/backend/.env
             echo "WEBHOOK_GLOBAL_URL='https://${{ secrets.APP_DOMAIN }}/api/whatsapp/webhook'" >> /home/admin/backend/.env
@@ -59,71 +63,73 @@ jobs:
             echo "CACHE_REDIS_ENABLED=true" >> /home/admin/backend/.env
             echo "CACHE_REDIS_URI=redis://redis:6379/6" >> /home/admin/backend/.env
 
-            # Backend specific variables
-            echo "DATABASE_URL=\"${{ secrets.DATABASE_URL }}\"" >> /home/admin/backend/.env
+            echo "DATABASE_URL=\"postgresql://user:pass@postgres:5432/evolution?schema=public\"" >> /home/admin/backend/.env
             echo "JWT_SECRET=\"${{ secrets.JWT_SECRET }}\"" >> /home/admin/backend/.env
-            echo "EVOLUTION_API_URL=\"http://api:8080\"" >> /home/admin/backend/.env # This assumes 'api' is a service name in your docker-compose
+            echo "EVOLUTION_API_URL=\"http://api:8080\"" >> /home/admin/backend/.env 
             echo "EVOLUTION_API_KEY=\"${{ secrets.EVOLUTION_API_KEY }}\"" >> /home/admin/backend/.env
             echo "EVOLUTION_INSTANCE_NAME=\"myinstance\"" >> /home/admin/backend/.env
+
+            echo "PG_HOST=postgres" >> /home/admin/backend/.env
+            echo "PG_PORT=5432" >> /home/admin/backend/.env
+            echo "PG_USER=user" >> /home/admin/backend/.env
+            echo "PG_PASSWORD=pass" >> /home/admin/backend/.env
+            echo "PG_DATABASE=evolution" >> /home/admin/backend/.env
           EOF
 
       - name: Deploy with Docker Compose on Contabo VM
         run: |
+          # Using 'admin' user
           ssh -o StrictHostKeyChecking=no -p 22486 admin@${{ secrets.CONTABO_HOST }} << EOF
-            cd /home/admin/backend
+            cd /home/admin/backend # Assuming /home/admin/backend
             
             # Ensure Docker and Docker Compose are installed
-            # This script attempts to install them if not found.
-            # You might want to provision your VM with these tools beforehand.
             if ! command -v docker &> /dev/null; then
               echo "Installing Docker..."
               curl -fsSL https://get.docker.com -o get-docker.sh
               sudo sh get-docker.sh
-              # Add the current user to the docker group to run docker without sudo
-              # This requires a new login session to take effect, or use 'newgrp docker'
-              sudo usermod -aG docker \$(whoami) 
-              echo "Docker installed. You might need to re-login or source group changes for docker commands to run without sudo."
+              # Add the current user (admin) to the docker group
+              sudo usermod -aG docker admin 
+              echo "Docker installed. User 'admin' added to docker group. A new login session might be needed for group changes to take full effect without sudo."
             else
               echo "Docker is already installed."
             fi
             
             if ! command -v docker-compose &> /dev/null; then
               echo "Installing Docker Compose..."
-              # Check for the latest version if needed
-              LATEST_COMPOSE_VERSION="v2.27.0" # Or use a dynamic way to get the latest
+              LATEST_COMPOSE_VERSION="v2.27.0" 
               sudo curl -L "https://github.com/docker/compose/releases/download/\${LATEST_COMPOSE_VERSION}/docker-compose-\$(uname -s)-\$(uname -m)" -o /usr/local/bin/docker-compose
               sudo chmod +x /usr/local/bin/docker-compose
               echo "Docker Compose installed."
             else
               echo "Docker Compose is already installed."
             fi
-
-            # It's good practice to ensure the user running this can execute docker commands.
-            # If 'sudo usermod -aG docker admin' was run, a new login/shell is often needed for it to take effect.
-            # For non-interactive scripts, you might need to run docker-compose with sudo or ensure group changes are applied.
             
-            docker-compose down
-            docker-compose up -d --build # Added --build
+            # Using sudo for docker-compose commands to ensure permissions
+            sudo docker-compose down
+            sudo docker-compose up -d --build 
             
-            # Wait a few seconds for the backend service to be ready before running migrations
-            echo "Waiting for backend service to start..."
+            echo "Waiting for backend service to start before running migrations..."
             sleep 15 
 
-            docker-compose exec -T backend npx prisma migrate deploy
+            # Apply Prisma migrations using sudo with docker-compose exec
+            sudo docker-compose exec -T backend npx prisma migrate deploy
           EOF
 
       - name: Verify Deployment on Contabo VM
         run: |
+          # Using 'admin' user
           ssh -o StrictHostKeyChecking=no -p 22486 admin@${{ secrets.CONTABO_HOST }} << EOF
-            cd /home/admin/backend
+            cd /home/admin/backend # Assuming /home/admin/backend
 
             echo "Verifying Docker containers..."
-            docker-compose ps
+            sudo docker-compose ps # Using sudo
 
             echo "Verifying backend logs (last 30 lines)..."
-            docker-compose logs --tail=30 backend
+            sudo docker-compose logs --tail=30 backend # Using sudo
 
-            echo "Verifying evolution_api logs (last 30 lines)..."
-            # Ensure 'evolution_api' is the correct service name in your docker-compose.yml
-            docker-compose logs --tail=30 evolution_api 
+            echo "Verifying api logs (last 30 lines)..."
+            sudo docker-compose logs --tail=30 api # Using sudo
+
+            echo "Verifying postgres logs (last 30 lines)..."
+            sudo docker-compose logs --tail=30 postgres # Using sudo
           EOF
