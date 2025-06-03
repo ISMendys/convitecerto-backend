@@ -4,11 +4,15 @@ FROM node:20-alpine
 # Defina o diretório de trabalho
 WORKDIR /usr/src/app
 
+# 1) Ativa o Corepack e instala o Yarn 4.1.1
+RUN corepack enable \
+ && corepack prepare yarn@4.1.1 --activate
+ 
 # Copie os arquivos de dependência
 COPY package*.json yarn.lock* ./ 
 
 # Instale as dependências
-RUN yarn install --frozen-lockfile
+RUN yarn install --immutable
 
 # Copie o restante dos arquivos da aplicação
 COPY . .

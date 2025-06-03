@@ -1,124 +1,170 @@
+let qrCache = {}; // Initialize an empty object to store QR codes by instance name
+
+/**
+ * @swagger
+ * tags:
+ *   - name: WhatsApp
+ *     description: Endpoints para gerenciamento e envio de mensagens via WhatsApp
+ */
 const express = require('express');
 const axios = require('axios');
 const { authenticate } = require('./auth.routes');
 const router = express.Router();
 
 // Configuração da Evolution API
-const evolutionApiUrl = process.env.EVOLUTION_API_URL || 'http://evolution_api:8080';
+const evolutionApiUrl = process.env.EVOLUTION_API_URL || 'http://api:8080';
 const evolutionApiKey = process.env.EVOLUTION_API_KEY || 'SUA_CHAVE_API_SECRETA_AQUI';
 const evolutionInstanceName = process.env.EVOLUTION_INSTANCE_NAME || 'myinstance';
 
-// Configuração do cliente axios para Evolution API
+// Cliente axios pré-configurado para Evolution API
 const evolutionApi = axios.create({
   baseURL: evolutionApiUrl,
   headers: {
     'Content-Type': 'application/json',
-    'apikey': evolutionApiKey
+    apikey: evolutionApiKey
   }
 });
 
-// Função para verificar se a instância existe e está conectada
-const checkInstanceStatus = async () => {
-  try {
-    const response = await evolutionApi.get(`/instance/fetchInstances`);
-    const instances = response.data.instances || [];
-    const instance = instances.find(i => i.instance === evolutionInstanceName);
-    
-    if (!instance) {
-      return { exists: false, connected: false };
+// Helper para pausa
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Verifica se a instância existe e seu status, com tentativas
+const checkInstanceStatus = async (retries = 3, delay = 1500) => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      console.log(`Tentativa ${i + 1}/${retries} de verificar status da instância ${evolutionInstanceName}...`);
+      const { data } = await evolutionApi.get("/instance/fetchInstances");
+      console.log("Resposta completa da API /instance/fetchInstances:", JSON.stringify(data, null, 2)); // Log detalhado da resposta
+      const instances = data || []; // Correção: A resposta é o próprio array
+      const inst = instances.find(i => i.name === evolutionInstanceName); // Correção: Usar i.name
+
+      if (inst) {
+        console.log(`Instância ${evolutionInstanceName} encontrada com status: ${inst.connectionStatus}`); // Correção: Usar inst.connectionStatus
+        const isConnected = inst.connectionStatus === 'open'; // Correção: Verificar 'open'
+        // Retorna imediatamente o status encontrado (conectado ou não)
+        return { exists: true, connected: isConnected, status: inst.connectionStatus }; // Correção: Retornar inst.connectionStatus
+      } else {
+        // Instância não encontrada na lista, loga e tenta novamente após delay
+        console.warn(`Instância ${evolutionInstanceName} não encontrada na lista retornada pela API na tentativa ${i + 1}.`);
+      }
+
+    } catch (err) {
+      // Log detalhado do erro de comunicação
+      console.error(`Erro de comunicação na tentativa ${i + 1} de verificar status:`, err.response?.data || err.message);
+      // Tenta novamente após delay
     }
-    
-    return { 
-      exists: true, 
-      connected: instance.status === 'connected',
-      status: instance.status
-    };
-  } catch (error) {
-    console.error('Erro ao verificar status da instância:', error.message);
-    return { exists: false, connected: false, error: error.message };
+
+    // Espera antes da próxima tentativa (exceto na última)
+    if (i < retries - 1) {
+      console.log(`Aguardando ${delay}ms antes da próxima tentativa...`);
+      await sleep(delay);
+    }
   }
+
+  // Se chegou aqui, todas as tentativas falharam ou a instância não foi encontrada
+  console.error(`Falha ao obter status da instância ${evolutionInstanceName} após ${retries} tentativas.`);
+  // Retorna um estado indicando falha na verificação. Manter o status undefined é consistente com o erro original.
+  return { exists: false, connected: false, error: `Falha ao verificar status após ${retries} tentativas` };
 };
 
-// Função para criar instância se não existir
+// Cria a instância se não existir
 const createInstanceIfNeeded = async () => {
-  try {
-    const status = await checkInstanceStatus();
-    
-    if (!status.exists) {
+  const status = await checkInstanceStatus();
+  if (!status.exists) {
+    try {
       await evolutionApi.post('/instance/create', {
-        instanceName: evolutionInstanceName
+        instanceName: evolutionInstanceName,
+        integration: 'WHATSAPP-BAILEYS'
       });
       return { created: true };
-    }
-    
-    return { created: false, status };
-  } catch (error) {
-    console.error('Erro ao criar instância:', error.message);
-    return { created: false, error: error.message };
-  }
-};
-
-// Função para enviar mensagem via Evolution API
-const sendWhatsAppMessage = async (to, body) => {
-  try {
-    // Verificar e criar instância se necessário
-    await createInstanceIfNeeded();
-    
-    // Verificar status da conexão
-    const status = await checkInstanceStatus();
-    if (!status.connected) {
-      throw new Error(`Instância não está conectada. Status atual: ${status.status}`);
-    }
-    
-    // Formatar número de telefone (remover caracteres não numéricos)
-    let formattedPhone = to.replace(/\D/g, '');
-    
-    // Garantir que o número esteja no formato internacional
-    if (!formattedPhone.startsWith('55') && formattedPhone.length === 11) {
-      formattedPhone = `55${formattedPhone}`;
-    }
-    
-    // Adicionar @ para o formato da Evolution API
-    if (!formattedPhone.includes('@')) {
-      formattedPhone = `${formattedPhone}@s.whatsapp.net`;
-    }
-    
-    // Enviar mensagem
-    const response = await evolutionApi.post(`/message/sendText/${evolutionInstanceName}`, {
-      number: formattedPhone,
-      options: {
-        delay: 1200
-      },
-      textMessage: {
-        text: body
+    } catch (err) {
+      // se já existe, ignora
+      if (err.response?.status === 403 &&
+          err.response.data?.response?.message?.some(msg =>
+            msg.includes('already in use')
+          )) {
+        return { created: false, status: await checkInstanceStatus() };
       }
-    });
-    
-    return {
-      sid: response.data.key?.id || `evolution-${Date.now()}`,
-      to: formattedPhone,
-      body,
-      status: response.data.status || 'sent',
-      dateCreated: new Date()
-    };
-  } catch (error) {
-    console.error('Erro ao enviar mensagem WhatsApp:', error);
-    throw error;
+      console.error('Erro ao criar instância:', err.message);
+      throw err;
+    }
   }
+  return { created: false, status };
 };
 
-// Função para simular envio de mensagem (para MVP sem conexão real)
-const mockSendWhatsApp = async (to, body) => {
+// Envia mensagem de texto via Evolution API
+const sendWhatsAppMessage = async (to, text) => {
+  await createInstanceIfNeeded();
+  const { connected, status } = await checkInstanceStatus();
+  if (!connected) throw new Error(`Instância não conectada (status: ${status})`);
+
+  let number = to.replace(/\D/g, '');
+  if (!number.startsWith('55') && number.length === 11) number = `55${number}`;
+  if (!number.includes('@')) number = `${number}@s.whatsapp.net`;
+
+  const { data } = await evolutionApi.post(
+    `/message/sendText/${evolutionInstanceName}`,
+    // Correção: Enviar 'text' diretamente, não dentro de 'textMessage'
+    { number, text, options: { delay: 1200 } } 
+  );
+
   return {
-    sid: `mock-${Date.now()}`,
-    to,
-    body,
-    status: 'sent',
+    sid: data.key?.id || `evo-${Date.now()}`,
+    to: number,
+    body: text,
+    status: data.status || 'sent',
     dateCreated: new Date()
   };
 };
 
-// Enviar convite via WhatsApp
+
+// Modo de simulação para envios sem Evolution
+const mockSendWhatsApp = async (to, text) => ({
+  sid: `mock-${Date.now()}`,
+  to,
+  body: text,
+  status: 'sent',
+  dateCreated: new Date()
+});
+
+
+/**
+ * @swagger
+ * /api/whatsapp/send-invite:
+ *   post:
+ *     summary: Envia convite via WhatsApp para um convidado específico
+ *     tags: [WhatsApp]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - guestId
+ *               - message
+ *               - inviteLink
+ *             properties:
+ *               guestId:
+ *                 type: string
+ *               message:
+ *                 type: string
+ *               inviteLink:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Convite enviado com sucesso
+ *       400:
+ *         description: Dados incompletos ou convidado não possui telefone
+ *       403:
+ *         description: Acesso negado
+ *       404:
+ *         description: Convidado não encontrado
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.post('/send-invite', authenticate, async (req, res) => {
   try {
     const { guestId, message, inviteLink } = req.body;
@@ -196,7 +242,41 @@ router.post('/send-invite', authenticate, async (req, res) => {
   }
 });
 
-// Enviar lembrete via WhatsApp
+
+/**
+ * @swagger
+ * /api/whatsapp/send-reminder:
+ *   post:
+ *     summary: Envia lembrete via WhatsApp para um convidado
+ *     tags: [WhatsApp]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - guestId
+ *               - message
+ *             properties:
+ *               guestId:
+ *                 type: string
+ *               message:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Lembrete enviado com sucesso
+ *       400:
+ *         description: Dados incompletos ou convidado sem telefone
+ *       403:
+ *         description: Acesso negado
+ *       404:
+ *         description: Convidado não encontrado
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.post('/send-reminder', authenticate, async (req, res) => {
   try {
     const { guestId, message } = req.body;
@@ -270,7 +350,46 @@ router.post('/send-reminder', authenticate, async (req, res) => {
   }
 });
 
-// Enviar mensagem em massa para todos os convidados de um evento
+
+/**
+ * @swagger
+ * /api/whatsapp/send-bulk:
+ *   post:
+ *     summary: Envia mensagem em massa via WhatsApp para convidados de um evento
+ *     tags: [WhatsApp]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - eventId
+ *               - message
+ *             properties:
+ *               eventId:
+ *                 type: string
+ *               message:
+ *                 type: string
+ *               filter:
+ *                 type: object
+ *                 properties:
+ *                   status:
+ *                     type: string
+ *     responses:
+ *       200:
+ *         description: Envio em massa realizado
+ *       400:
+ *         description: Dados incompletos ou nenhum convidado encontrado
+ *       403:
+ *         description: Acesso negado
+ *       404:
+ *         description: Evento não encontrado
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.post('/send-bulk', authenticate, async (req, res) => {
   try {
     const { eventId, message, filter } = req.body;
@@ -379,87 +498,108 @@ router.post('/send-bulk', authenticate, async (req, res) => {
   }
 });
 
-// Webhook para receber respostas do WhatsApp (para integração com Evolution API)
+
+/**
+ * @swagger
+ * /api/whatsapp/webhook:
+ *   post:
+ *     summary: Webhook para receber eventos da Evolution API
+ *     tags: [WhatsApp]
+ *     requestBody:
+ *       description: Payload do webhook da Evolution API
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: Evento recebido e processado (ou ignorado)
+ */
 router.post('/webhook', async (req, res) => {
   try {
     req.logger.info('Webhook do WhatsApp recebido:', req.body);
-    
-    // Verificar se é um webhook da Evolution API
-    if (req.body.event === 'messages.upsert' && req.body.data && req.body.data.key) {
-      // Extrair dados da mensagem
+
+    // Captura QR code atualizado
+    if (req.body.event === 'qrcode.updated' &&
+        req.body.instance === evolutionInstanceName &&
+        req.body.data?.qrcode?.base64
+    ) {
+      qrCache[evolutionInstanceName] = req.body.data.qrcode.base64;
+      req.logger.info(`QR Code recebido e armazenado para instância ${evolutionInstanceName}`); // Log adicionado
+      return res.status(200).send('OK');
+    }
+
+    // Processa mensagens de resposta (RSVP)
+    if (req.body.event === 'messages.upsert' && req.body.data?.key) {
       const messageData = req.body.data;
       const phone = messageData.key.remoteJid.split('@')[0];
-      const body = messageData.message?.conversation || 
-                  messageData.message?.extendedTextMessage?.text || 
-                  'Mensagem sem texto';
-      
-      // Buscar convidado pelo número de telefone
+      const text = messageData.message?.conversation || messageData.message?.extendedTextMessage?.text || '';
       const guest = await req.prisma.guest.findFirst({
-        where: {
-          phone: {
-            contains: phone.substring(phone.length - 9) // Buscar pelos últimos 9 dígitos
-          }
-        }
+        where: { phone: { contains: phone.slice(-9) } } // Ajuste para buscar pelo final do número
       });
-      
-      if (!guest) {
-        req.logger.warn(`Mensagem recebida de número não cadastrado: ${phone}`);
-        return res.status(200).send('OK');
-      }
-      
-      // Processar resposta como RSVP
-      const lowerBody = body.toLowerCase().trim();
-      
-      let newStatus = null;
-      
-      // Verificar se a resposta indica confirmação ou recusa
-      if (['sim', 'yes', 'confirmo', 'confirmado', 'vou', 'estarei lá', 'estarei la'].some(term => lowerBody.includes(term))) {
-        newStatus = 'confirmed';
-      } else if (['não', 'nao', 'no', 'recuso', 'recusado', 'não vou', 'nao vou', 'não poderei', 'nao poderei'].some(term => lowerBody.includes(term))) {
-        newStatus = 'declined';
-      }
-      
-      // Atualizar status do convidado se a resposta foi reconhecida
-      if (newStatus) {
-        await req.prisma.guest.update({
-          where: { id: guest.id },
-          data: { status: newStatus }
-        });
+      if (guest) {
+        const lower = text.toLowerCase();
+        let newStatus = null;
+        if (['sim','yes','confirmo','confirmado','vou'].some(t => lower.includes(t))) newStatus = 'confirmed';
+        else if (['não','nao','no','recuso','recusado'].some(t => lower.includes(t))) newStatus = 'declined';
         
-        // Registrar mensagem recebida
-        await req.prisma.message.create({
-          data: {
-            type: 'response',
-            content: body,
-            status: 'received',
-            guestId: guest.id
-          }
-        });
+        // Registra a mensagem recebida
+        await req.prisma.message.create({ data: {
+          type: newStatus ? 'response' : 'other',
+          content: text,
+          status: 'received',
+          guestId: guest.id
+        }});
         
-        req.logger.info(`Status do convidado ${guest.name} atualizado para ${newStatus} via WhatsApp`);
+        // Atualiza o status do convidado se for uma resposta válida
+        if (newStatus) {
+          await req.prisma.guest.update({ where: { id: guest.id }, data: { status: newStatus } });
+          req.logger.info(`Convidado ${guest.name} (${guest.id}) atualizado para status: ${newStatus}`);
+        } else {
+          req.logger.info(`Mensagem recebida de ${guest.name} (${guest.id}) não interpretada como RSVP: ${text}`);
+        }
       } else {
-        // Registrar mensagem recebida mesmo que não seja uma resposta de RSVP reconhecida
-        await req.prisma.message.create({
-          data: {
-            type: 'other',
-            content: body,
-            status: 'received',
-            guestId: guest.id
-          }
-        });
-        
-        req.logger.info(`Mensagem recebida de ${guest.name} via WhatsApp: ${body}`);
+        req.logger.warn(`Mensagem recebida de número não associado a nenhum convidado: ${phone}`);
       }
+      return res.status(200).send('OK');
     }
-    
+
+    // Ignorar outros eventos
     res.status(200).send('OK');
   } catch (error) {
-    req.logger.error('Erro ao processar webhook do WhatsApp:', error);
-    res.status(200).send('OK'); // Sempre retornar 200 para webhooks, mesmo em caso de erro
+    req.logger.error('Erro ao processar webhook do WhatsApp:', error.message, error.stack);
+    // É importante responder 200 OK para a Evolution API não ficar reenviando o webhook
+    res.status(200).send('OK'); 
   }
 });
 
-// Rota para verificar o status da instância do WhatsApp
+
+/**
+ * @swagger
+ * /api/whatsapp/status:
+ *   get:
+ *     summary: Verifica o status da conexão da instância WhatsApp
+ *     tags: [WhatsApp]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Status da instância
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 exists:
+ *                   type: boolean
+ *                 connected:
+ *                   type: boolean
+ *                 status:
+ *                   type: string
+ *       500:
+ *         description: Erro ao verificar status
+ */
 router.get('/status', authenticate, async (req, res) => {
   try {
     const status = await checkInstanceStatus();
@@ -470,79 +610,96 @@ router.get('/status', authenticate, async (req, res) => {
   }
 });
 
-// Rota para obter o QR Code da instância
+/**
+ * @swagger
+ * /api/whatsapp/qrcode:
+ *   get:
+ *     summary: Obtém o QR Code para conectar a instância WhatsApp
+ *     tags: [WhatsApp]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: QR Code em formato base64
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 qrcode:
+ *                   type: string
+ *       404:
+ *         description: QR Code não disponível (instância conectada, não encontrada ou QR ainda não recebido)
+ *       500:
+ *         description: Erro interno ao obter QR Code
+ */
 router.get('/qrcode', authenticate, async (req, res) => {
   try {
-    // Verificar se a instância existe
-    const status = await checkInstanceStatus();
-    
-    if (!status.exists) {
-      // Criar instância se não existir
-      await createInstanceIfNeeded();
+    // Não chamar createInstanceIfNeeded aqui, pois o QR só existe se a instância já foi criada e está aguardando conexão.
+    const qr = qrCache[evolutionInstanceName];
+    if (!qr) {
+      req.logger.warn(`Tentativa de obter QR Code para ${evolutionInstanceName}, mas não encontrado no cache.`);
+      const status = await checkInstanceStatus();
+      if (!status.exists) {
+        return res.status(404).json({ error: 'Instância não encontrada. Crie a instância primeiro.' });
+      } else if (status.connected) {
+        return res.status(404).json({ error: 'Instância já conectada, QR Code não é mais necessário ou expirou.' });
+      } else {
+        // Se a instância existe mas não está conectada, e não temos QR, ele pode não ter chegado ainda ou expirou.
+        return res.status(404).json({ error: 'QR Code não disponível ou ainda não recebido pelo webhook. Tente novamente em alguns segundos.' });
+      }
     }
-    
-    // Obter QR Code
-    const response = await evolutionApi.get(`/instance/qrcode/${evolutionInstanceName}`);
-    
-    if (response.data && response.data.qrcode) {
-      res.status(200).json({ qrcode: response.data.qrcode });
-    } else {
-      res.status(404).json({ error: 'QR Code não disponível' });
+    // Opcional: Limpar o QR do cache após ser enviado para evitar reutilização.
+    // Considerar se o frontend pode precisar buscar o mesmo QR múltiplas vezes.
+    // delete qrCache[evolutionInstanceName]; 
+    return res.status(200).json({ qrcode: qr });
+  } catch (err) {
+    // Verifica se o erro é ReferenceError (caso qrCache não esteja definido - segurança extra)
+    if (err instanceof ReferenceError && err.message.includes('qrCache is not defined')) {
+       req.logger.error('Erro Crítico: Variável qrCache não foi inicializada no whatsapp.routes.js!', err);
+       return res.status(500).json({ error: 'Erro interno do servidor: Falha na configuração do cache de QR Code.' });
     }
-  } catch (error) {
-    req.logger.error('Erro ao obter QR Code:', error);
-    res.status(500).json({ error: 'Erro ao obter QR Code' });
+    // Log genérico para outros erros
+    req.logger.error('Erro inesperado ao obter QR Code:', err.message, err.stack);
+    res.status(500).json({ error: 'Erro interno ao obter QR Code' });
   }
 });
 
-// Rota para configurar webhook da instância
-router.post('/configure-webhook', authenticate, async (req, res) => {
-  try {
-    const { webhookUrl } = req.body;
-    
-    if (!webhookUrl) {
-      return res.status(400).json({ error: 'URL do webhook não fornecida' });
-    }
-    
-    // Verificar se a instância existe
-    const status = await checkInstanceStatus();
-    
-    if (!status.exists) {
-      // Criar instância se não existir
-      await createInstanceIfNeeded();
-    }
-    
-    // Configurar webhook
-    const response = await evolutionApi.post(`/webhook/set/${evolutionInstanceName}`, {
-      enabled: true,
-      url: webhookUrl,
-      webhookByEvents: false
-    });
-    
-    res.status(200).json({ success: true, message: 'Webhook configurado com sucesso' });
-  } catch (error) {
-    req.logger.error('Erro ao configurar webhook:', error);
-    res.status(500).json({ error: 'Erro ao configurar webhook' });
-  }
-});
 
-// Rota para desconectar a instância
+/**
+ * @swagger
+ * /api/whatsapp/disconnect:
+ *   post:
+ *     summary: Desconecta a instância WhatsApp
+ *     tags: [WhatsApp]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Instância desconectada com sucesso
+ *       404:
+ *         description: Instância não encontrada
+ *       500:
+ *         description: Erro ao desconectar instância
+ */
 router.post('/disconnect', authenticate, async (req, res) => {
   try {
-    // Verificar se a instância existe
     const status = await checkInstanceStatus();
+    if (!status.exists) return res.status(404).json({ error: 'Instância não encontrada' });
     
-    if (!status.exists) {
-      return res.status(404).json({ error: 'Instância não encontrada' });
-    }
+    // Só tenta desconectar se existir
+    await evolutionApi.delete(`/instance/logout/${evolutionInstanceName}`);
     
-    // Desconectar instância
-    const response = await evolutionApi.delete(`/instance/logout/${evolutionInstanceName}`);
+    // Limpa o QR code do cache ao desconectar, caso ainda exista
+    delete qrCache[evolutionInstanceName]; 
+    req.logger.info(`Instância ${evolutionInstanceName} desconectada e QR Code (se existente) removido do cache.`);
     
     res.status(200).json({ success: true, message: 'Instância desconectada com sucesso' });
-  } catch (error) {
-    req.logger.error('Erro ao desconectar instância:', error);
-    res.status(500).json({ error: 'Erro ao desconectar instância' });
+  } catch (err) {
+    // Tratar erro caso a instância já esteja desconectada ou ocorra outro problema na API
+    req.logger.error('Erro ao desconectar instância:', err.response?.data || err.message);
+    // Retorna um erro genérico, mas loga o detalhe
+    res.status(500).json({ error: 'Erro ao tentar desconectar a instância' }); 
   }
 });
 

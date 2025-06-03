@@ -47,7 +47,7 @@ Este projeto contém a integração do backend Convite Certo com a Evolution API
 Execute o comando para iniciar todos os serviços:
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 Este comando iniciará:
@@ -146,7 +146,26 @@ Se precisar desconectar o número de WhatsApp:
 ```
 POST /api/whatsapp/disconnect
 ```
+### Limpar docker
+```
+# 1) Pare todos os containers em execução
+docker stop $(docker ps -q)
 
+# 2) Remova todos os containers (parados e em execução)
+docker rm $(docker ps -aq)
+
+# 3) Remova todas as imagens
+docker rmi $(docker images -q) --force
+
+# 4) Remova todos os volumes
+docker volume rm $(docker volume ls -q)
+
+# 5) Remova todas as redes criadas pelo usuário (exceto as padrão)
+docker network prune -f
+
+# 6) (Opcional) Limpe cache de build do Docker
+docker builder prune -f
+```
 ### Logs
 
 Para verificar os logs dos serviços:

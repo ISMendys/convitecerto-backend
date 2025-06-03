@@ -14,6 +14,9 @@ services:
       - evolution-net
     env_file:
       - .env
+    environment:
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://user:pass@postgres:5432/evolution?schema=public
     expose:
       - 8080
 

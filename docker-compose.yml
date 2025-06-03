@@ -1,93 +1,98 @@
 version: '3.8'
 
 services:
-  backend:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: convitecerto_backend
-    restart: always
-    ports:
-      - "5000:5000"
+  api: # Evolution API
+    image: atendai/evolution-api:homolog
+    container_name: evolution_api
     env_file:
       - ./.env
+    # Adiciona a seção environment para garantir que EVOLUTION_API_KEY seja definida
     environment:
-      EVOLUTION_API_URL: http://evolution_api:8080
-      EVOLUTION_API_KEY: ${AUTHENTICATION_API_KEY:-SUA_CHAVE_API_SECRETA_AQUI}
-      EVOLUTION_INSTANCE_NAME: myinstance
-      DATABASE_URL: ${DATABASE_URL}
-    networks:
-      - evolution-net
-    depends_on:
-      - evolution_api
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-  evolution_api:
-    container_name: evolution_api
-    image: atendai/evolution-api:homolog
-    restart: always
-    depends_on:
-      - redis
-      - postgres
+      # Mapeia a AUTHENTICATION_API_KEY do .env para EVOLUTION_API_KEY que a API espera
+      EVOLUTION_API_KEY: ${AUTHENTICATION_API_KEY}
+      # Você pode adicionar outras variáveis específicas da API aqui se necessário,
+      # mas as outras parecem estar sendo lidas corretamente do .env
+      # Exemplo: DATABASE_URL: ${DATABASE_URL}
     ports:
       - "8080:8080"
     volumes:
       - evolution_instances:/evolution/instances
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
     networks:
       - evolution-net
+    # Adicionar healthcheck para garantir que a API esteja escutando
+    healthcheck:
+      test: ["CMD-SHELL", "apk add curl && curl -f http://localhost:8080/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s # Tempo para a API iniciar antes do primeiro check
+
+  backend: # ConviteCerto
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: convitecerto_backend
     env_file:
       - ./.env
-    expose:
-      - 8080
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-  redis:
-    image: redis:latest
+    # Garante que o backend também tenha acesso à chave correta (já deve funcionar via .env)
+    # environment:
+    #   EVOLUTION_API_KEY: ${AUTHENTICATION_API_KEY}
+    ports:
+      - "5000:5000"
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
     networks:
       - evolution-net
+
+  redis:
+    image: redis:7-alpine
     container_name: redis
-    command: >
-      redis-server --port 6379 --appendonly yes
+    command: redis-server --appendonly yes
     volumes:
       - evolution_redis:/data
     ports:
       - "6379:6379"
-    deploy:
-      resources:
-        limits:
-          memory: 128M
-  postgres:
-    container_name: postgres
-    image: postgres:15
     networks:
       - evolution-net
-    command: ["postgres", "-c", "max_connections=1000", "-c", "listen_addresses=*"]
-    restart: always
-    ports:
-      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL","redis-cli ping || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pass}
-      POSTGRES_DB: ${POSTGRES_DB:-evolution}
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: pass
+      POSTGRES_DB: evolution
       POSTGRES_HOST_AUTH_METHOD: trust
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    expose:
-      - 5432
-    deploy:
-      resources:
-        limits:
-          memory: 512M
+    ports:
+      - "5432:5432"
+    networks:
+      - evolution-net
+    healthcheck:
+      test: ["CMD-SHELL","pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+networks:
+  evolution-net:
+    driver: bridge
+
 volumes:
   evolution_instances:
   evolution_redis:
   postgres_data:
-
-networks:
-  evolution-net:
-    name: evolution-net
-    driver: bridge

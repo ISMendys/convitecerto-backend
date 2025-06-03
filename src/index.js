@@ -6,7 +6,8 @@ const helmet        = require('helmet');
 const morgan        = require('morgan');
 const { PrismaClient } = require('@prisma/client');
 const winston       = require('winston');
-
+const swaggerUi  = require('swagger-ui-express');
+const swaggerJSDoc = require('swagger-jsdoc');
 
 // 3. Importação das rotas (desestruturando para pegar apenas o router)
 const { router: authRoutes }     = require('./routes/auth.routes');
@@ -67,6 +68,42 @@ app.use('/api/events',   eventRoutes);
 app.use('/api/invites',  inviteRoutes);
 app.use('/api/guests',   guestRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
+
+// 1) Definição básica do OpenAPI
+const swaggerDefinition = {
+  openapi: '3.0.0',
+  info: {
+    title: 'API Convite Certo',
+    version: '1.0.0',
+    description: 'Documentação interativa dos endpoints'
+  },
+  servers: [
+    { url: 'http://localhost:5000' }
+  ],
+  components: {
+    securitySchemes: {
+      bearerAuth: {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT'
+      }
+    }
+  },
+  security: [{
+    bearerAuth: []
+  }]
+};
+
+// 2) Aponta para os seus arquivos de rotas para extrair comentários JSDoc
+const options = {
+  swaggerDefinition,
+  apis: ['./src/routes/*.js']
+};
+
+const swaggerSpec = swaggerJSDoc(options);
+
+// 3) Monta a UI em /docs
+app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // 9. Health check
 app.get('/health', (req, res) => {
