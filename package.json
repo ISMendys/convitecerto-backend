@@ -25,7 +25,6 @@
     "winston": "^3.8.2"
   },
   "devDependencies": {
-    "dotenv": "^16.5.0",
     "jest": "^29.5.0",
     "nodemon": "^2.0.22",
     "prisma": "6.9.0",
