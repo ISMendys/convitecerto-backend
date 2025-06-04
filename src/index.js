@@ -43,7 +43,7 @@ const logger = winston.createLogger({
 });
 
 const corsOptions = {
-  origin: 'https://api.convitecerto.online', // Domínio do seu frontend/docs
+  origin: 'https://convitecerto.online', // Domínio do seu frontend/docs
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
@@ -86,6 +86,7 @@ const swaggerDefinition = {
   },
   servers: [
     {"url": "https://api.convitecerto.online", "description": "Servidor de Produção"},
+    {"url": "https://convitecerto.online", "description": "Frontend de Produção"},
     {"url": "http://localhost:5000", "description": "Servidor de Desenvolvimento Local"}
   ],
   components: {

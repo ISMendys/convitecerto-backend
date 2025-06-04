@@ -165,6 +165,7 @@ certbot --nginx \
     --email "${ADMIN_EMAIL}" \
     --agree-tos \
     --redirect \
+    --expand \
     --non-interactive \
     --keep-until-expiring # Ou --force-renewal se quiser forçar a renovação
 
