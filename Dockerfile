@@ -1,42 +1,23 @@
-# --------------------------
-# Etapa 1: Build
-# --------------------------
-    FROM node:20-alpine AS builder
+# Etapa de build
+FROM node:20-alpine AS builder
 
-    WORKDIR /app
-    
-    RUN corepack enable && corepack prepare yarn@4.1.1 --activate
-    
-    # Copia arquivos de dependência
-    COPY package.json yarn.lock ./
-    
-    # Instala todas dependências (incluindo dev)
-    RUN yarn install --immutable
-    
-    # Copia tudo e gera o Prisma Client
-    COPY . .
-    
-    RUN yarn prisma generate
-    
-    # --------------------------
-    # Etapa 2: Produção
-    # --------------------------
-    FROM node:20-alpine
-    
-    WORKDIR /app
-    
-    RUN corepack enable && corepack prepare yarn@4.1.1 --activate
-    
-    # Copia arquivos necessários para prod
-    COPY package.json yarn.lock ./
-    
-    # Instala apenas dependências de produção
-    RUN yarn install --immutable --production
-    
-    # Copia arquivos da build anterior, incluindo Prisma Client
-    COPY --from=builder /app ./
-    
-    EXPOSE 5000
-    
-    CMD [ "yarn", "start" ]
-    
+WORKDIR /app
+
+RUN corepack enable && corepack prepare yarn@4.1.1 --activate
+
+COPY package.json yarn.lock ./
+RUN yarn install --immutable
+
+COPY . .
+
+# Etapa final de produção
+FROM node:20-alpine
+
+WORKDIR /app
+
+RUN corepack enable && corepack prepare yarn@4.1.1 --activate
+
+COPY --from=builder /app /app
+
+# Aqui não instala nada, pois já vem com node_modules da etapa anterior
+CMD ["node", "src/index.js"]
