@@ -31,7 +31,7 @@
     COPY package.json yarn.lock ./
     
     # Instala apenas dependências de produção
-    RUN yarn install --immutable --mode=production
+    RUN yarn install --immutable --production
     
     # Copia arquivos da build anterior, incluindo Prisma Client
     COPY --from=builder /app ./
