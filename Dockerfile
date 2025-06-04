@@ -1,28 +1,42 @@
-# Use uma imagem base do Node.js
-FROM node:20-alpine
+# --------------------------
+# Etapa 1: Build
+# --------------------------
+    FROM node:20-alpine AS builder
 
-# Defina o diretório de trabalho
-WORKDIR /usr/src/app
-
-# 1) Ativa o Corepack e instala o Yarn 4.1.1
-RUN corepack enable \
- && corepack prepare yarn@4.1.1 --activate
- 
-# Copie os arquivos de dependência
-COPY package*.json yarn.lock* ./ 
-
-# Instale as dependências
-RUN yarn install --immutable
-
-# Copie o restante dos arquivos da aplicação
-COPY . .
-
-# Gere o cliente Prisma
-RUN yarn prisma generate
-
-# Exponha a porta que a aplicação usa (padrão 5000)
-EXPOSE 5000
-
-# Comando para iniciar a aplicação
-CMD [ "yarn", "start" ]
-
+    WORKDIR /app
+    
+    RUN corepack enable && corepack prepare yarn@4.1.1 --activate
+    
+    # Copia arquivos de dependência
+    COPY package.json yarn.lock ./
+    
+    # Instala todas dependências (incluindo dev)
+    RUN yarn install --immutable
+    
+    # Copia tudo e gera o Prisma Client
+    COPY . .
+    
+    RUN yarn prisma generate
+    
+    # --------------------------
+    # Etapa 2: Produção
+    # --------------------------
+    FROM node:20-alpine
+    
+    WORKDIR /app
+    
+    RUN corepack enable && corepack prepare yarn@4.1.1 --activate
+    
+    # Copia arquivos necessários para prod
+    COPY package.json yarn.lock ./
+    
+    # Instala apenas dependências de produção
+    RUN yarn install --immutable --mode=production
+    
+    # Copia arquivos da build anterior, incluindo Prisma Client
+    COPY --from=builder /app ./
+    
+    EXPOSE 5000
+    
+    CMD [ "yarn", "start" ]
+    
