@@ -730,7 +730,7 @@ router.post("/rsvp/:id", async (req, res) => {
  *         group:
  *           type: string
  *           nullable: true
- *           description: Grupo ao qual o convidado pertence (ex: 'Família da Noiva').
+ *           description: "Grupo ao qual o convidado pertence (ex: 'Família da Noiva')."
  *         createdAt:
  *           type: string
  *           format: date-time
