@@ -85,7 +85,8 @@ const swaggerDefinition = {
     description: 'Documentação interativa dos endpoints'
   },
   servers: [
-    { url: 'http://localhost:5000' }
+    {"url": "https://api.convitecerto.online", "description": "Servidor de Produção"},
+    {"url": "http://localhost:5000", "description": "Servidor de Desenvolvimento Local"}
   ],
   components: {
     securitySchemes: {
