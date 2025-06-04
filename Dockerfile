@@ -21,4 +21,4 @@ COPY --from=builder /app /app
 
 RUN yarn install --immutable
 
-CMD ["node", "src/index.js"]
+CMD ["yarn", "node", "src/index.js"]
