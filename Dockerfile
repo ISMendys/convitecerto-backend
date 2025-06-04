@@ -1,10 +1,13 @@
-# Etapa de build
 FROM node:20-alpine
 
 WORKDIR /app
 
-RUN corepack enable && corepack prepare yarn@4.1.1 --activate
+RUN corepack enable
 
-RUN yarn install
+COPY package.json yarn.lock ./
+
+RUN yarn install --immutable
+
+COPY . .
 
 CMD ["node", "src/index.js"]
