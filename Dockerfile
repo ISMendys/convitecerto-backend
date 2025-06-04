@@ -7,7 +7,6 @@ RUN corepack enable && corepack prepare yarn@4.1.1 --activate
 
 COPY package.json yarn.lock ./
 # Se você tiver um .yarnrc.yml, copie ele também:
-COPY .yarnrc.yml ./
 
 RUN yarn install --immutable
 
