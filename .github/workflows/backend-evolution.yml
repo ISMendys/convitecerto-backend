@@ -105,8 +105,14 @@ jobs:
             fi
             
             # Using sudo for docker-compose commands to ensure permissions
+            echo "Stopping and removing old containers if they exist..."
             sudo docker-compose down
-            sudo docker-compose up -d --build 
+
+            echo "Building backend service without cache..."
+            sudo docker-compose build --no-cache backend 
+            
+            echo "Starting all services..."
+            sudo docker-compose up -d
             
             echo "Waiting for backend service to start before running migrations..."
             sleep 15 
