@@ -18,7 +18,7 @@ RUN yarn install --immutable
 COPY . .
 
 # Gere o cliente Prisma
-RUN ./node_modules/.bin/prisma generate
+RUN yarn exec prisma generate
 
 # Exponha a porta que a aplicação usa (padrão 5000)
 EXPOSE 5000
