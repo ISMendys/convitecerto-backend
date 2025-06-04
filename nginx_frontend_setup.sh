@@ -2,7 +2,7 @@
 
 # --- Configurações ---
 # Mude o ADMIN_EMAIL para o seu e-mail!
-ADMIN_EMAIL="seu-email-aqui@example.com"
+ADMIN_EMAIL="orkutcaiu.com@gmail.com"
 
 MAIN_DOMAIN="convitecerto.online"
 EVOLUTION_SUBDOMAIN="evolution"
@@ -13,6 +13,7 @@ FULL_API_DOMAIN="${API_SUBDOMAIN}.${MAIN_DOMAIN}"
 
 EVOLUTION_SERVICE_PORT="8080" # Porta interna da sua Evolution API
 API_SERVICE_PORT="5000"       # Porta interna do seu backend
+FRONTEND_BUILD_PATH="/home/admin/frontend" # Caminho para os arquivos de build do frontend
 
 # --- Funções Auxiliares ---
 log_action() {
@@ -25,7 +26,7 @@ log_action() {
 set -e
 
 # --- Início do Script ---
-log_action "Iniciando script de configuração do Nginx e Certbot"
+log_action "Iniciando script de configuração do Nginx, Frontend e Certbot"
 
 if [ "$ADMIN_EMAIL" == "seu-email-aqui@example.com" ]; then
   echo "[AVISO] Por favor, edite este script e altere a variável ADMIN_EMAIL para o seu endereço de e-mail."
@@ -72,6 +73,35 @@ else
 fi
 
 # 4. Criar configurações do Nginx
+log_action "Criando configuração do Nginx para ${MAIN_DOMAIN} (Frontend)..."
+# Certifique-se de que o diretório pai do FRONTEND_BUILD_PATH existe
+mkdir -p "$(dirname "${FRONTEND_BUILD_PATH}")"
+# Crie o diretório do frontend se ele não existir (importante para o Nginx iniciar)
+mkdir -p "${FRONTEND_BUILD_PATH}"
+
+cat <<EOF > "/etc/nginx/sites-available/${MAIN_DOMAIN}"
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${MAIN_DOMAIN};
+
+    root ${FRONTEND_BUILD_PATH};
+    index index.html index.htm;
+
+    location / {
+        # Essencial para Single Page Applications (React, Vue, Angular, etc.)
+        # Tenta servir o arquivo diretamente, depois como diretório, e por último fallback para index.html
+        try_files \$uri \$uri/ /index.html;
+    }
+
+    # Opcional: Configurações adicionais para cache de assets estáticos
+    location ~* \.(?:css|js|jpg|jpeg|gif|png|ico|svg|webp|woff|woff2|ttf|eot)$ {
+        expires 1M;
+        add_header Cache-Control "public";
+    }
+}
+EOF
+
 log_action "Criando configuração do Nginx para ${FULL_EVOLUTION_DOMAIN}..."
 cat <<EOF > "/etc/nginx/sites-available/${FULL_EVOLUTION_DOMAIN}"
 server {
@@ -116,6 +146,7 @@ EOF
 
 # 5. Habilitar sites Nginx (usando -f para forçar, caso já existam)
 log_action "Habilitando sites no Nginx..."
+ln -sf "/etc/nginx/sites-available/${MAIN_DOMAIN}" "/etc/nginx/sites-enabled/"
 ln -sf "/etc/nginx/sites-available/${FULL_EVOLUTION_DOMAIN}" "/etc/nginx/sites-enabled/"
 ln -sf "/etc/nginx/sites-available/${FULL_API_DOMAIN}" "/etc/nginx/sites-enabled/"
 
@@ -126,18 +157,20 @@ log_action "Recarregando Nginx..."
 systemctl reload nginx
 
 # 7. Obter certificados SSL com Certbot
-log_action "Obtendo certificados SSL com Certbot..."
+log_action "Obtendo certificados SSL com Certbot para todos os domínios..."
 certbot --nginx \
+    -d "${MAIN_DOMAIN}" \
     -d "${FULL_EVOLUTION_DOMAIN}" \
     -d "${FULL_API_DOMAIN}" \
     --email "${ADMIN_EMAIL}" \
     --agree-tos \
     --redirect \
     --non-interactive \
-    --keep-until-expiring # Ou --force-renewal se quiser forçar a renovação, mas não é usual para setup inicial
+    --keep-until-expiring # Ou --force-renewal se quiser forçar a renovação
 
 log_action "Configuração concluída com sucesso!"
 echo "Seus sites devem estar acessíveis via HTTPS:"
-echo "https://${FULL_EVOLUTION_DOMAIN}"
-echo "https://${FULL_API_DOMAIN}"
+echo "Frontend: https://${MAIN_DOMAIN}"
+echo "Evolution: https://${FULL_EVOLUTION_DOMAIN}"
+echo "API: https://${FULL_API_DOMAIN}"
 echo "A renovação automática do SSL também está configurada."
