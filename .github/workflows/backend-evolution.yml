@@ -84,7 +84,6 @@ jobs:
             # Ensure Docker Compose (plugin V2) is available
             if ! docker compose version &> /dev/null; then
               echo "Docker Compose V2 not found. Please ensure Docker Engine is up-to-date and includes the Compose plugin."
-              # Attempt to install/update Docker again, which might fetch the compose plugin
               echo "Attempting to update Docker which might include Docker Compose plugin..."
               curl -fsSL https://get.docker.com -o get-docker.sh
               sudo sh get-docker.sh
@@ -96,17 +95,13 @@ jobs:
               echo "Docker Compose V2 is available."
             fi
 
-            # echo "Stopping all running Docker containers..."
-            # sudo docker ps -aq | xargs -r sudo docker stop
-            
-            # echo "Removing all Docker containers, networks, volumes, and images (system prune)..."
-            # sudo docker system prune -af --volumes 
+            echo "Stopping old services (if running)..."
+            sudo docker compose down
 
-            # echo "Building services without cache..."
-            # sudo docker compose build --no-cache
+            echo "Building services with the latest code..." # Adicionado/Recomendado
+            sudo docker compose build --no-cache            # Adicionado/Recomendado
 
             echo "Starting all services..."
-            sudo docker compose down
             sudo docker compose up -d
 
             echo "Waiting for backend service to start before running migrations (15s)..."
