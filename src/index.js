@@ -42,8 +42,15 @@ const logger = winston.createLogger({
   ],
 });
 
+const corsOptions = {
+  origin: 'https://api.convitecerto.online', // Domínio do seu frontend/docs
+  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+};
+
 // 6. Middlewares globais
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(helmet());
 app.use(express.json());
 app.use(morgan('combined'));
