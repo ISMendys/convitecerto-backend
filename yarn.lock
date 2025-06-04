@@ -846,7 +846,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@prisma/client@npm:^6.6.0":
+"@prisma/client@npm:6.9.0":
   version: 6.9.0
   resolution: "@prisma/client@npm:6.9.0"
   peerDependencies:
@@ -1760,7 +1760,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "convites-digitais-backend@workspace:."
   dependencies:
-    "@prisma/client": "npm:^6.6.0"
+    "@prisma/client": "npm:6.9.0"
     axios: "npm:^1.6.2"
     bcrypt: "npm:^5.1.1"
     cors: "npm:^2.8.5"
