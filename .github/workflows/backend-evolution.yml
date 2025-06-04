@@ -35,15 +35,14 @@ jobs:
 
       - name: Create .env file on Contabo VM
         run: |
-          ssh -o StrictHostKeyChecking=no -p 22486 admin@${{ secrets.CONTABO_HOST }} << EOF
+          ssh -o StrictHostKeyChecking=no -p ${{ secrets.CONTABO_SSH_PORT || 22486 }} admin@${{ secrets.CONTABO_HOST }} << EOF
             mkdir -p /home/admin/backend
-            echo "SERVER_TYPE=http" > /home/admin/backend/.env
+            echo "# --- Evolution API Settings ---" > /home/admin/backend/.env
+            echo "SERVER_TYPE=http" >> /home/admin/backend/.env
             echo "SERVER_PORT=8080" >> /home/admin/backend/.env
-            echo "SERVER_URL=http://localhost:8080" >> /home/admin/backend/.env
-
+            # Use um nome de banco dedicado para Evolution
             echo "DATABASE_PROVIDER=postgresql" >> /home/admin/backend/.env
-            echo "DATABASE_CONNECTION_URI='postgresql://user:pass@postgres:5432/evolution?schema=public'" >> /home/admin/backend/.env
-
+            echo "DATABASE_CONNECTION_URI='postgresql://${{ secrets.DB_USER || 'user' }}:${{ secrets.DB_PASS || 'pass' }}@postgres:5432/${{ secrets.EVO_DB_NAME || 'evolution_prod' }}?schema=public'" >> /home/admin/backend/.env
             echo "AUTHENTICATION_API_KEY=\"${{ secrets.EVOLUTION_API_KEY }}\"" >> /home/admin/backend/.env
             echo "WEBHOOK_GLOBAL_ENABLED=true" >> /home/admin/backend/.env
             echo "WEBHOOK_GLOBAL_URL='https://${{ secrets.APP_DOMAIN }}/api/whatsapp/webhook'" >> /home/admin/backend/.env
@@ -51,17 +50,19 @@ jobs:
             echo "CACHE_REDIS_ENABLED=true" >> /home/admin/backend/.env
             echo "CACHE_REDIS_URI=redis://redis:6379/6" >> /home/admin/backend/.env
 
-            echo "DATABASE_URL=\"postgresql://user:pass@postgres:5432/evolution?schema=public\"" >> /home/admin/backend/.env
+            echo "" >> /home/admin/backend/.env
+            echo "# --- Backend ConviteCerto Settings ---" >> /home/admin/backend/.env
+            echo "PORT=5000" >> /home/admin/backend/.env
+            # Use um nome de banco dedicado para o Backend e um schema específico
+            echo "DATABASE_URL=\"postgresql://${{ secrets.DB_USER || 'user' }}:${{ secrets.DB_PASS || 'pass' }}@postgres:5432/${{ secrets.BACKEND_DB_NAME || 'convitecerto_prod' }}?schema=backend_schema\"" >> /home/admin/backend/.env
             echo "JWT_SECRET=\"${{ secrets.JWT_SECRET }}\"" >> /home/admin/backend/.env
             echo "EVOLUTION_API_URL=\"http://api:8080\"" >> /home/admin/backend/.env
             echo "EVOLUTION_API_KEY=\"${{ secrets.EVOLUTION_API_KEY }}\"" >> /home/admin/backend/.env
             echo "EVOLUTION_INSTANCE_NAME=\"myinstance\"" >> /home/admin/backend/.env
 
-            echo "PG_HOST=postgres" >> /home/admin/backend/.env
-            echo "PG_PORT=5432" >> /home/admin/backend/.env
-            echo "PG_USER=user" >> /home/admin/backend/.env
-            echo "PG_PASSWORD=pass" >> /home/admin/backend/.env
-            echo "PG_DATABASE=evolution" >> /home/admin/backend/.env
+            # Remover variáveis PG_* redundantes
+            # echo "PG_HOST=postgres" >> /home/admin/backend/.env
+            # ... (remover outras PG_*)
           EOF
 
       - name: Deploy Application on Contabo VM
@@ -98,14 +99,19 @@ jobs:
             echo "Stopping old services (if running)..."
             sudo docker compose down
 
-            echo "Building services with the latest code..." # Adicionado/Recomendado
-            sudo docker compose build --no-cache            # Adicionado/Recomendado
+            echo "Building services with the latest code..."
+            sudo docker compose build
 
             echo "Starting all services..."
             sudo docker compose up -d
 
             echo "Applying Prisma migrations..."
-            # sudo docker compose exec -T backend npx prisma migrate deploy
+            # Espera um pouco para o backend iniciar antes de tentar a migração
+            sleep 15 
+            # Executa a migração dentro do container do backend
+            sudo docker compose exec -T backend npx prisma migrate deploy
+
+            echo "Deployment finished."
           EOF
 
       - name: Verify Deployment on Contabo VM

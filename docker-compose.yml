@@ -51,6 +51,9 @@ services:
         condition: service_healthy
     networks:
       - evolution-net
+    volumes:
+      - .:/app
+      - /app/node_modules
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 5s
