@@ -1,64 +1,97 @@
+
+version: '3.8'
+
 services:
-  api:
-    container_name: evolution_api
+  api: # Evolution API
     image: atendai/evolution-api:homolog
-    restart: always
-    depends_on:
-      - redis
-      - postgres
+    container_name: evolution_api
+    env_file:
+      - ./.env.api
     ports:
-      - 8080:8080
+      - "8080:8080"
     volumes:
       - evolution_instances:/evolution/instances
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
     networks:
       - evolution-net
+    healthcheck:
+      test: ["CMD-SHELL", "apk add curl --no-cache && curl -f http://localhost:8080/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: convitecerto_backend
     env_file:
-      - .env
-    environment:
-      DATABASE_PROVIDER: postgresql
-      DATABASE_CONNECTION_URI: postgresql://user:pass@postgres:5432/evolution?schema=evolution_api_schema
-    expose:
-      - 8080
+      - ./.env.backend
+    ports:
+      - "5000:5000"
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - evolution-net
+    volumes:
+      - .:/app
+      - /app/node_modules
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 5s
+      timeout: 2s
+      retries: 10
 
   redis:
-    image: redis:latest
-    networks:
-      - evolution-net
+    image: redis:7-alpine
     container_name: redis
-    command: >
-      redis-server --port 6379 --appendonly yes
+    command: redis-server --appendonly yes
     volumes:
       - evolution_redis:/data
     ports:
-      - 6379:6379
-
-  postgres:
-    container_name: postgres
-    image: postgres:15
+      - "6379:6379"
     networks:
       - evolution-net
-    command: ["postgres", "-c", "max_connections=1000", "-c", "listen_addresses=*"]
-    restart: always
-    ports:
-      - 5432:5432
+    healthcheck:
+      test: ["CMD-SHELL","redis-cli ping | grep PONG || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
     environment:
-      - POSTGRES_USER=user
-      - POSTGRES_PASSWORD=pass
-      - POSTGRES_DB=evolution
-      - POSTGRES_HOST_AUTH_METHOD=trust
+      POSTGRES_USER: ${DB_USER:-user}
+      POSTGRES_PASSWORD: ${DB_PASS:-pass}
+      POSTGRES_DB: ${EVO_DB_NAME:-evolution_prod}
+      POSTGRES_HOST_AUTH_METHOD: trust 
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    expose:
-      - 5432
+    ports:
+      - "5432:5432"
+    networks:
+      - evolution-net
+    healthcheck:
+      test: ["CMD-SHELL","pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB} || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+networks:
+  evolution-net:
+    driver: bridge
 
 volumes:
   evolution_instances:
   evolution_redis:
   postgres_data:
-
-
-networks:
-  evolution-net:
-    name: evolution-net
-    driver: bridge
 

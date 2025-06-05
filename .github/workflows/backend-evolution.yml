@@ -1,3 +1,4 @@
+
 name: Deploy Backend & Evolution API to Contabo VM
 
 on:
@@ -20,76 +21,90 @@ jobs:
 
       - name: Upload Project Files to Contabo VM
         run: |
-          rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no -p 22486" \
-            --include='docker-compose.yml' \
-            --include='Dockerfile' \
-            --include='package.json' \
-            --include='yarn.lock' \
-            --include='README.md' \
-            --include='db.js' \
-            --include='estrutura_back.txt' \
-            --include='prisma/***' \
-            --include='src/***' \
-            --exclude='*' \
+          # Upload docker-compose-modified.yml instead of the old one
+          # Ensure the modified docker-compose.yml is in your repo or created here
+          # For now, assuming docker-compose-modified.yml exists in the repo root
+          rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no -p ${{ secrets.CONTABO_SSH_PORT || 22486 }}" \
+            --include=\'docker-compose.yml\' \
+            --include=\'Dockerfile\' \
+            --include=\'package.json\' \
+            --include=\'yarn.lock\' \
+            --include=\'README.md\' \
+            --include=\'db.js\' \
+            --include=\'estrutura_back.txt\' \
+            --include=\'prisma/***\' \
+            --include=\'src/***\' \
+            --exclude=\'*\' \
             ./ admin@${{ secrets.CONTABO_HOST }}:/home/admin/backend/
 
-      - name: Create .env file on Contabo VM
+      - name: Create Separate .env files on Contabo VM
         run: |
           ssh -o StrictHostKeyChecking=no -p ${{ secrets.CONTABO_SSH_PORT || 22486 }} admin@${{ secrets.CONTABO_HOST }} << EOF
             mkdir -p /home/admin/backend
-            echo "# --- Evolution API Settings ---" > /home/admin/backend/.env
-            echo "SERVER_TYPE=http" >> /home/admin/backend/.env
-            echo "SERVER_PORT=8080" >> /home/admin/backend/.env
-            # Use um nome de banco dedicado para Evolution
-            echo "DATABASE_PROVIDER=postgresql" >> /home/admin/backend/.env
-            echo "DATABASE_CONNECTION_URI='postgresql://${{ secrets.DB_USER || 'user' }}:${{ secrets.DB_PASS || 'pass' }}@postgres:5432/${{ secrets.EVO_DB_NAME || 'evolution_prod' }}?schema=public'" >> /home/admin/backend/.env
-            echo "AUTHENTICATION_API_KEY=\"${{ secrets.EVOLUTION_API_KEY }}\"" >> /home/admin/backend/.env
-            echo "WEBHOOK_GLOBAL_ENABLED=true" >> /home/admin/backend/.env
-            echo "WEBHOOK_GLOBAL_URL='https://${{ secrets.APP_DOMAIN }}/api/whatsapp/webhook'" >> /home/admin/backend/.env
-            echo "WEBHOOK_EVENTS_MESSAGES_UPSERT=true" >> /home/admin/backend/.env
-            echo "CACHE_REDIS_ENABLED=true" >> /home/admin/backend/.env
-            echo "CACHE_REDIS_URI=redis://redis:6379/6" >> /home/admin/backend/.env
 
-            echo "" >> /home/admin/backend/.env
-            echo "# --- Backend ConviteCerto Settings ---" >> /home/admin/backend/.env
-            echo "PORT=5000" >> /home/admin/backend/.env
-            # Use um nome de banco dedicado para o Backend e um schema específico
-            echo "DATABASE_URL=\"postgresql://${{ secrets.DB_USER || 'user' }}:${{ secrets.DB_PASS || 'pass' }}@postgres:5432/${{ secrets.BACKEND_DB_NAME || 'convitecerto_prod' }}?schema=backend_schema\"" >> /home/admin/backend/.env
-            echo "JWT_SECRET=\"${{ secrets.JWT_SECRET }}\"" >> /home/admin/backend/.env
-            echo "EVOLUTION_API_URL=\"http://api:8080\"" >> /home/admin/backend/.env
-            echo "EVOLUTION_API_KEY=\"${{ secrets.EVOLUTION_API_KEY }}\"" >> /home/admin/backend/.env
-            echo "EVOLUTION_INSTANCE_NAME=\"myinstance\"" >> /home/admin/backend/.env
+            # Create .env.api
+            echo "# Arquivo: .env.api" > /home/admin/backend/.env.api
+            echo "# Variáveis de ambiente específicas para a Evolution API" >> /home/admin/backend/.env.api
+            echo "SERVER_TYPE=http" >> /home/admin/backend/.env.api
+            echo "SERVER_PORT=8080" >> /home/admin/backend/.env.api
+            echo "DATABASE_PROVIDER=postgresql" >> /home/admin/backend/.env.api
+            echo "DATABASE_CONNECTION_URI=\"postgresql://${{ secrets.DB_USER || 'user' }}:${{ secrets.DB_PASS || 'pass' }}@postgres:5432/${{ secrets.EVO_DB_NAME || 'evolution_prod' }}?schema=public\"" >> /home/admin/backend/.env.api
+            # IMPORTANT: Use the correct secret name for the API key
+            echo "AUTHENTICATION_API_KEY=\"${{ secrets.EVOLUTION_API_KEY }}\"" >> /home/admin/backend/.env.api
+            echo "WEBHOOK_GLOBAL_ENABLED=true" >> /home/admin/backend/.env.api
+            # Use internal service name 'backend' for webhook URL
+            echo "WEBHOOK_GLOBAL_URL=\"http://backend:5000/api/whatsapp/webhook\"" >> /home/admin/backend/.env.api
+            echo "WEBHOOK_EVENTS_MESSAGES_UPSERT=true" >> /home/admin/backend/.env.api
+            echo "CACHE_REDIS_ENABLED=true" >> /home/admin/backend/.env.api
+            echo "CACHE_REDIS_URI=redis://redis:6379/6" >> /home/admin/backend/.env.api
 
-            # Remover variáveis PG_* redundantes
-            # echo "PG_HOST=postgres" >> /home/admin/backend/.env
-            # ... (remover outras PG_*)
+            # Create .env.backend
+            echo "# Arquivo: .env.backend" > /home/admin/backend/.env.backend
+            echo "# Variáveis de ambiente específicas para o Backend ConviteCerto" >> /home/admin/backend/.env.backend
+            echo "PORT=5000" >> /home/admin/backend/.env.backend
+            echo "DATABASE_URL=\"postgresql://${{ secrets.DB_USER || 'user' }}:${{ secrets.DB_PASS || 'pass' }}@postgres:5432/${{ secrets.BACKEND_DB_NAME || 'convitecerto_prod' }}?schema=backend_schema\"" >> /home/admin/backend/.env.backend
+            echo "JWT_SECRET=\"${{ secrets.JWT_SECRET }}\"" >> /home/admin/backend/.env.backend
+            echo "EVOLUTION_API_URL=\"http://api:8080\"" >> /home/admin/backend/.env.backend
+            echo "EVOLUTION_API_KEY=\"${{ secrets.EVOLUTION_API_KEY }}\"" >> /home/admin/backend/.env.backend
+            echo "EVOLUTION_INSTANCE_NAME=\"myinstance\"" >> /home/admin/backend/.env.backend
+
+            # Create .env for docker-compose environment variables (DB user/pass)
+            # These are used by the postgres service definition itself
+            echo "# Arquivo: .env (para docker-compose)" > /home/admin/backend/.env
+            echo "DB_USER=${{ secrets.DB_USER || 'user' }}" >> /home/admin/backend/.env
+            echo "DB_PASS=${{ secrets.DB_PASS || 'pass' }}" >> /home/admin/backend/.env
+            echo "EVO_DB_NAME=${{ secrets.EVO_DB_NAME || 'evolution_prod' }}" >> /home/admin/backend/.env
+            echo "BACKEND_DB_NAME=${{ secrets.BACKEND_DB_NAME || 'convitecerto_prod' }}" >> /home/admin/backend/.env
+            # Include secrets needed by the .env.api and .env.backend files too
+            echo "EVOLUTION_API_KEY=${{ secrets.EVOLUTION_API_KEY }}" >> /home/admin/backend/.env
+            echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> /home/admin/backend/.env
+
           EOF
 
       - name: Deploy Application on Contabo VM
         run: |
-          ssh -o StrictHostKeyChecking=no -p 22486 admin@${{ secrets.CONTABO_HOST }} << EOF
+          ssh -o StrictHostKeyChecking=no -p ${{ secrets.CONTABO_SSH_PORT || 22486 }} admin@${{ secrets.CONTABO_HOST }} << EOF
             set -e # Exit immediately if a command exits with a non-zero status.
             cd /home/admin/backend
 
-            # Ensure Docker is installed
+            # Ensure Docker is installed (keep this check)
             if ! command -v docker &> /dev/null; then
               echo "Installing Docker..."
               curl -fsSL https://get.docker.com -o get-docker.sh
               sudo sh get-docker.sh
-              sudo usermod -aG docker admin # Add admin to docker group (may require new session for user)
+              sudo usermod -aG docker admin
               echo "Docker installed."
             else
               echo "Docker is already installed."
             fi
 
-            # Ensure Docker Compose (plugin V2) is available
+            # Ensure Docker Compose (plugin V2) is available (keep this check)
             if ! docker compose version &> /dev/null; then
-              echo "Docker Compose V2 not found. Please ensure Docker Engine is up-to-date and includes the Compose plugin."
-              echo "Attempting to update Docker which might include Docker Compose plugin..."
+              echo "Docker Compose V2 not found. Attempting to update Docker..."
               curl -fsSL https://get.docker.com -o get-docker.sh
               sudo sh get-docker.sh
               if ! docker compose version &> /dev/null; then
-                 echo "Docker Compose V2 still not found. Please install it manually on the VM."
+                 echo "Docker Compose V2 still not found. Please install it manually."
                  exit 1
               fi
             else
@@ -97,37 +112,44 @@ jobs:
             fi
 
             echo "Stopping old services (if running)..."
-            sudo docker compose down
+            # Use the modified docker-compose file
+            sudo docker compose -f docker-compose.yml down || echo "No services were running."
 
             echo "Building services with the latest code..."
-            sudo docker compose build
+            # Use the modified docker-compose file
+            sudo docker compose -f docker-compose.yml build
 
             echo "Starting all services..."
-            sudo docker compose up -d
+            # Use the modified docker-compose file
+            sudo docker compose -f docker-compose.yml up -d
 
             echo "Applying Prisma migrations..."
-            # Espera um pouco para o backend iniciar antes de tentar a migração
-            sleep 15 
-            # Executa a migração dentro do container do backend
-            sudo docker compose exec -T backend npx prisma migrate deploy
+            sleep 15
+            # Use the modified docker-compose file
+            sudo docker compose -f docker-compose.yml exec -T backend npx prisma migrate deploy
 
             echo "Deployment finished."
           EOF
 
       - name: Verify Deployment on Contabo VM
         run: |
-          ssh -o StrictHostKeyChecking=no -p 22486 admin@${{ secrets.CONTABO_HOST }} << EOF
+          ssh -o StrictHostKeyChecking=no -p ${{ secrets.CONTABO_SSH_PORT || 22486 }} admin@${{ secrets.CONTABO_HOST }} << EOF
             cd /home/admin/backend
 
             echo "Verifying Docker containers status:"
-            sudo docker compose ps
+            # Use the modified docker-compose file
+            sudo docker compose -f docker-compose.yml ps
 
             echo "Verifying backend logs (last 30 lines):"
-            sudo docker compose logs --tail=30 backend
+            # Use the modified docker-compose file
+            sudo docker compose -f docker-compose.yml logs --tail=30 backend
 
             echo "Verifying api logs (last 30 lines):"
-            sudo docker compose logs --tail=30 api # Assuming 'api' is the service name for Evolution API
+            # Use the modified docker-compose file
+            sudo docker compose -f docker-compose.yml logs --tail=30 api
 
             echo "Verifying postgres logs (last 30 lines):"
-            sudo docker compose logs --tail=30 postgres
+            # Use the modified docker-compose file
+            sudo docker compose -f docker-compose.yml logs --tail=30 postgres
           EOF
+
