@@ -44,7 +44,7 @@ jobs:
             echo "SERVER_PORT=8080" >> /home/admin/backend/.env
             echo "DATABASE_PROVIDER=postgresql" >> /home/admin/backend/.env
             # Use DB_USER, DB_PASS, EVO_DB_NAME defined above
-            echo "DATABASE_CONNECTION_URI=\"postgresql://".${{ secrets.DB_USER || 'user' }}.":".${{ secrets.DB_PASS || 'pass' }}."@postgres:5432/".${{ secrets.EVO_DB_NAME || 'evolution_prod' }}."?schema=public\"" >> /home/admin/backend/.env
+            echo "DATABASE_CONNECTION_URI=\"postgresql://"${{ secrets.DB_USER || 'user' }}":"${{ secrets.DB_PASS || 'pass' }}"@postgres:5432/"${{ secrets.EVO_DB_NAME || 'evolution_prod' }}"?schema=public\"" >> /home/admin/backend/.env
             echo "AUTHENTICATION_API_KEY=\"${{ secrets.EVOLUTION_API_KEY }}\"" >> /home/admin/backend/.env
             echo "WEBHOOK_GLOBAL_ENABLED=true" >> /home/admin/backend/.env
             echo "WEBHOOK_GLOBAL_URL=\"http://backend:5000/api/whatsapp/webhook\"" >> /home/admin/backend/.env
@@ -56,7 +56,7 @@ jobs:
             echo "# --- Backend ConviteCerto Settings ---" >> /home/admin/backend/.env
             echo "PORT=5000" >> /home/admin/backend/.env
             # Use DB_USER, DB_PASS, BACKEND_DB_NAME defined above
-            echo "DATABASE_URL=\"postgresql://".${{ secrets.DB_USER || 'user' }}.":".${{ secrets.DB_PASS || 'pass' }}."@postgres:5432/".${{ secrets.BACKEND_DB_NAME || 'convitecerto_prod' }}."?schema=backend_schema\"" >> /home/admin/backend/.env
+            echo "DATABASE_URL=\"postgresql://"${{ secrets.DB_USER || 'user' }}":"${{ secrets.DB_PASS || 'pass' }}"@postgres:5432/"${{ secrets.BACKEND_DB_NAME || 'convitecerto_prod' }}"?schema=backend_schema\"" >> /home/admin/backend/.env
             echo "JWT_SECRET=\"${{ secrets.JWT_SECRET }}\"" >> /home/admin/backend/.env
             echo "EVOLUTION_API_URL=\"http://api:8080\"" >> /home/admin/backend/.env
             echo "EVOLUTION_API_KEY=\"${{ secrets.EVOLUTION_API_KEY }}\"" >> /home/admin/backend/.env
