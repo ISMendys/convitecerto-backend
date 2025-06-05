@@ -125,8 +125,9 @@ jobs:
 
             echo "Applying Prisma migrations..."
             sleep 15
-            # Use the modified docker-compose file
-            sudo docker compose -f docker-compose.yml exec -T backend npx prisma migrate deploy
+            # Carrega as envs do backend e executa a migração
+            sudo docker compose -f docker-compose.yml exec -T backend sh -c '. /app/.env.backend && npx prisma migrate deploy'
+
 
             echo "Deployment finished."
           EOF
