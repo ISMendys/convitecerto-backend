@@ -21,9 +21,7 @@ jobs:
 
       - name: Upload Project Files to Contabo VM
         run: |
-          # Upload docker-compose-modified.yml instead of the old one
-          # Ensure the modified docker-compose.yml is in your repo or created here
-          # For now, assuming docker-compose-modified.yml exists in the repo root
+          # Upload the final docker-compose.yml (ensure it's named docker-compose.yml in your repo)
           rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no -p ${{ secrets.CONTABO_SSH_PORT || 22486 }}" \
             --include=\'docker-compose.yml\' \
             --include=\'Dockerfile\' \
@@ -49,10 +47,8 @@ jobs:
             echo "SERVER_PORT=8080" >> /home/admin/backend/.env.api
             echo "DATABASE_PROVIDER=postgresql" >> /home/admin/backend/.env.api
             echo "DATABASE_CONNECTION_URI=\"postgresql://${{ secrets.DB_USER || 'user' }}:${{ secrets.DB_PASS || 'pass' }}@postgres:5432/${{ secrets.EVO_DB_NAME || 'evolution_prod' }}?schema=public\"" >> /home/admin/backend/.env.api
-            # IMPORTANT: Use the correct secret name for the API key
             echo "AUTHENTICATION_API_KEY=\"${{ secrets.EVOLUTION_API_KEY }}\"" >> /home/admin/backend/.env.api
             echo "WEBHOOK_GLOBAL_ENABLED=true" >> /home/admin/backend/.env.api
-            # Use internal service name 'backend' for webhook URL
             echo "WEBHOOK_GLOBAL_URL=\"http://backend:5000/api/whatsapp/webhook\"" >> /home/admin/backend/.env.api
             echo "WEBHOOK_EVENTS_MESSAGES_UPSERT=true" >> /home/admin/backend/.env.api
             echo "CACHE_REDIS_ENABLED=true" >> /home/admin/backend/.env.api
@@ -62,22 +58,23 @@ jobs:
             echo "# Arquivo: .env.backend" > /home/admin/backend/.env.backend
             echo "# Variáveis de ambiente específicas para o Backend ConviteCerto" >> /home/admin/backend/.env.backend
             echo "PORT=5000" >> /home/admin/backend/.env.backend
-            echo "DATABASE_URL=\"postgresql://${{ secrets.DB_USER || 'user' }}:${{ secrets.DB_PASS || 'pass' }}@postgres:5432/${{ secrets.BACKEND_DB_NAME || 'convitecerto_prod' }}?schema=backend_schema\"" >> /home/admin/backend/.env.backend
+            # DATABASE_URL is now set via environment in docker-compose, but keep it here for reference or direct use if needed
+            echo "DATABASE_URL_FROM_FILE=\"postgresql://${{ secrets.DB_USER || 'user' }}:${{ secrets.DB_PASS || 'pass' }}@postgres:5432/${{ secrets.BACKEND_DB_NAME || 'convitecerto_prod' }}?schema=backend_schema\"" >> /home/admin/backend/.env.backend
             echo "JWT_SECRET=\"${{ secrets.JWT_SECRET }}\"" >> /home/admin/backend/.env.backend
             echo "EVOLUTION_API_URL=\"http://api:8080\"" >> /home/admin/backend/.env.backend
             echo "EVOLUTION_API_KEY=\"${{ secrets.EVOLUTION_API_KEY }}\"" >> /home/admin/backend/.env.backend
             echo "EVOLUTION_INSTANCE_NAME=\"myinstance\"" >> /home/admin/backend/.env.backend
 
-            # Create .env for docker-compose environment variables (DB user/pass)
-            # These are used by the postgres service definition itself
+            # Create .env for docker-compose environment variables
             echo "# Arquivo: .env (para docker-compose)" > /home/admin/backend/.env
             echo "DB_USER=${{ secrets.DB_USER || 'user' }}" >> /home/admin/backend/.env
             echo "DB_PASS=${{ secrets.DB_PASS || 'pass' }}" >> /home/admin/backend/.env
             echo "EVO_DB_NAME=${{ secrets.EVO_DB_NAME || 'evolution_prod' }}" >> /home/admin/backend/.env
             echo "BACKEND_DB_NAME=${{ secrets.BACKEND_DB_NAME || 'convitecerto_prod' }}" >> /home/admin/backend/.env
-            # Include secrets needed by the .env.api and .env.backend files too
             echo "EVOLUTION_API_KEY=${{ secrets.EVOLUTION_API_KEY }}" >> /home/admin/backend/.env
             echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> /home/admin/backend/.env
+            # Add the full DATABASE_URL for the backend here, named BACKEND_DATABASE_URL
+            echo "BACKEND_DATABASE_URL=\"postgresql://${{ secrets.DB_USER || 'user' }}:${{ secrets.DB_PASS || 'pass' }}@postgres:5432/${{ secrets.BACKEND_DB_NAME || 'convitecerto_prod' }}?schema=backend_schema\"" >> /home/admin/backend/.env
 
           EOF
 
@@ -112,21 +109,21 @@ jobs:
             fi
 
             echo "Stopping old services (if running)..."
-            # Use the modified docker-compose file
+            # Use the final docker-compose file (ensure it's named docker-compose.yml)
             sudo docker compose -f docker-compose.yml down || echo "No services were running."
 
             echo "Building services with the latest code..."
-            # Use the modified docker-compose file
+            # Use the final docker-compose file
             sudo docker compose -f docker-compose.yml build
 
             echo "Starting all services..."
-            # Use the modified docker-compose file
+            # Use the final docker-compose file
             sudo docker compose -f docker-compose.yml up -d
 
             echo "Applying Prisma migrations..."
             sleep 15
-            # Passa o arquivo .env.backend diretamente para o comando exec
-            sudo docker compose -f docker-compose.yml exec -T --env-file /app/.env.backend backend npx prisma migrate deploy
+            # Use the simple exec command now, as DATABASE_URL is in the environment
+            sudo docker compose -f docker-compose.yml exec -T backend npx prisma migrate deploy
 
             echo "Deployment finished."
           EOF
@@ -137,19 +134,19 @@ jobs:
             cd /home/admin/backend
 
             echo "Verifying Docker containers status:"
-            # Use the modified docker-compose file
+            # Use the final docker-compose file
             sudo docker compose -f docker-compose.yml ps
 
             echo "Verifying backend logs (last 30 lines):"
-            # Use the modified docker-compose file
+            # Use the final docker-compose file
             sudo docker compose -f docker-compose.yml logs --tail=30 backend
 
             echo "Verifying api logs (last 30 lines):"
-            # Use the modified docker-compose file
+            # Use the final docker-compose file
             sudo docker compose -f docker-compose.yml logs --tail=30 api
 
             echo "Verifying postgres logs (last 30 lines):"
-            # Use the modified docker-compose file
+            # Use the final docker-compose file
             sudo docker compose -f docker-compose.yml logs --tail=30 postgres
           EOF
 
