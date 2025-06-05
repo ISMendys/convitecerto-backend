@@ -1,3 +1,4 @@
+
 version: '3.8'
 
 services:
@@ -6,13 +7,6 @@ services:
     container_name: evolution_api
     env_file:
       - ./.env
-    # Adiciona a seção environment para garantir que EVOLUTION_API_KEY seja definida
-    environment:
-      # Mapeia a AUTHENTICATION_API_KEY do .env para EVOLUTION_API_KEY que a API espera
-      EVOLUTION_API_KEY: ${AUTHENTICATION_API_KEY}
-      # Você pode adicionar outras variáveis específicas da API aqui se necessário,
-      # mas as outras parecem estar sendo lidas corretamente do .env
-      # Exemplo: DATABASE_URL: ${DATABASE_URL}
     ports:
       - "8080:8080"
     volumes:
@@ -24,13 +18,12 @@ services:
         condition: service_healthy
     networks:
       - evolution-net
-    # Adicionar healthcheck para garantir que a API esteja escutando
     healthcheck:
-      test: ["CMD-SHELL", "apk add curl && curl -f http://localhost:8080/ || exit 1"]
+      test: ["CMD-SHELL", "apk add curl --no-cache && curl -f http://localhost:8080/ || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 30s # Tempo para a API iniciar antes do primeiro check
+      start_period: 30s
 
   backend: # ConviteCerto
     build:
@@ -39,9 +32,6 @@ services:
     container_name: convitecerto_backend
     env_file:
       - ./.env
-    # Garante que o backend também tenha acesso à chave correta (já deve funcionar via .env)
-    # environment:
-    #   EVOLUTION_API_KEY: ${AUTHENTICATION_API_KEY}
     ports:
       - "5000:5000"
     depends_on:
@@ -53,7 +43,7 @@ services:
       - evolution-net
     volumes:
       - .:/app
-      - /app/node_modules
+      - /app/node_modules # Garante que node_modules não seja sobrescrito
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 5s
@@ -71,7 +61,7 @@ services:
     networks:
       - evolution-net
     healthcheck:
-      test: ["CMD-SHELL","redis-cli ping || exit 1"]
+      test: ["CMD-SHELL","redis-cli ping | grep PONG || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -79,10 +69,12 @@ services:
   postgres:
     image: postgres:15-alpine
     container_name: postgres
+    env_file:
+      - ./.env
     environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: pass
-      POSTGRES_DB: evolution
+      POSTGRES_USER: ${DB_USER:-user}
+      POSTGRES_PASSWORD: ${DB_PASS:-pass}
+      POSTGRES_DB: ${EVO_DB_NAME:-evolution_prod} # DB principal
       POSTGRES_HOST_AUTH_METHOD: trust
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -91,7 +83,7 @@ services:
     networks:
       - evolution-net
     healthcheck:
-      test: ["CMD-SHELL","pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" || exit 1"]
+      test: ["CMD-SHELL","pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB} || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5

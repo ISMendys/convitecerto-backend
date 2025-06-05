@@ -1,5 +1,5 @@
 
-name: Deploy Backend & Evolution API to Contabo VM
+name: Deploy Backend & Evolution API to Contabo VM (Simplified .env)
 
 on:
   push:
@@ -21,60 +21,58 @@ jobs:
 
       - name: Upload Project Files to Contabo VM
         run: |
-          # Upload the final docker-compose.yml (ensure it's named docker-compose.yml in your repo)
+          # Upload the simplified docker-compose.yml (ensure it's named docker-compose.yml in your repo)
           rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no -p ${{ secrets.CONTABO_SSH_PORT || 22486 }}" \
             --include=\'docker-compose.yml\' \
             --include=\'Dockerfile\' \
             --include=\'package.json\' \
             --include=\'yarn.lock\' \
             --include=\'README.md\' \
-            --include=\'db.js\' \
-            --include=\'estrutura_back.txt\' \
-            --include=\'prisma/***\' \
-            --include=\'src/***\' \
-            --exclude=\'*\' \
+            --include=\'db.js\'
+            --include=\'estrutura_back.txt\'
+            --include=\'prisma/***\'
+            --include=\'src/***\'
+            --exclude=\'*\'
             ./ admin@${{ secrets.CONTABO_HOST }}:/home/admin/backend/
 
-      - name: Create Separate .env files on Contabo VM
+      - name: Create Single .env file on Contabo VM
         run: |
           ssh -o StrictHostKeyChecking=no -p ${{ secrets.CONTABO_SSH_PORT || 22486 }} admin@${{ secrets.CONTABO_HOST }} << EOF
             mkdir -p /home/admin/backend
 
-            # Create .env.api
-            echo "# Arquivo: .env.api" > /home/admin/backend/.env.api
-            echo "# Variáveis de ambiente específicas para a Evolution API" >> /home/admin/backend/.env.api
-            echo "SERVER_TYPE=http" >> /home/admin/backend/.env.api
-            echo "SERVER_PORT=8080" >> /home/admin/backend/.env.api
-            echo "DATABASE_PROVIDER=postgresql" >> /home/admin/backend/.env.api
-            echo "DATABASE_CONNECTION_URI=\"postgresql://${{ secrets.DB_USER || 'user' }}:${{ secrets.DB_PASS || 'pass' }}@postgres:5432/${{ secrets.EVO_DB_NAME || 'evolution_prod' }}?schema=public\"" >> /home/admin/backend/.env.api
-            echo "AUTHENTICATION_API_KEY=\"${{ secrets.EVOLUTION_API_KEY }}\"" >> /home/admin/backend/.env.api
-            echo "WEBHOOK_GLOBAL_ENABLED=true" >> /home/admin/backend/.env.api
-            echo "WEBHOOK_GLOBAL_URL=\"http://backend:5000/api/whatsapp/webhook\"" >> /home/admin/backend/.env.api
-            echo "WEBHOOK_EVENTS_MESSAGES_UPSERT=true" >> /home/admin/backend/.env.api
-            echo "CACHE_REDIS_ENABLED=true" >> /home/admin/backend/.env.api
-            echo "CACHE_REDIS_URI=redis://redis:6379/6" >> /home/admin/backend/.env.api
+            # Create a single .env file with all variables
+            echo "# Arquivo: .env (Compartilhado)" > /home/admin/backend/.env
 
-            # Create .env.backend
-            echo "# Arquivo: .env.backend" > /home/admin/backend/.env.backend
-            echo "# Variáveis de ambiente específicas para o Backend ConviteCerto" >> /home/admin/backend/.env.backend
-            echo "PORT=5000" >> /home/admin/backend/.env.backend
-            # DATABASE_URL is now set via environment in docker-compose, but keep it here for reference or direct use if needed
-            echo "DATABASE_URL_FROM_FILE=\"postgresql://${{ secrets.DB_USER || 'user' }}:${{ secrets.DB_PASS || 'pass' }}@postgres:5432/${{ secrets.BACKEND_DB_NAME || 'convitecerto_prod' }}?schema=backend_schema\"" >> /home/admin/backend/.env.backend
-            echo "JWT_SECRET=\"${{ secrets.JWT_SECRET }}\"" >> /home/admin/backend/.env.backend
-            echo "EVOLUTION_API_URL=\"http://api:8080\"" >> /home/admin/backend/.env.backend
-            echo "EVOLUTION_API_KEY=\"${{ secrets.EVOLUTION_API_KEY }}\"" >> /home/admin/backend/.env.backend
-            echo "EVOLUTION_INSTANCE_NAME=\"myinstance\"" >> /home/admin/backend/.env.backend
-
-            # Create .env for docker-compose environment variables
-            echo "# Arquivo: .env (para docker-compose)" > /home/admin/backend/.env
+            echo "" >> /home/admin/backend/.env
+            echo "# --- Docker Compose Variables ---" >> /home/admin/backend/.env
             echo "DB_USER=${{ secrets.DB_USER || 'user' }}" >> /home/admin/backend/.env
             echo "DB_PASS=${{ secrets.DB_PASS || 'pass' }}" >> /home/admin/backend/.env
             echo "EVO_DB_NAME=${{ secrets.EVO_DB_NAME || 'evolution_prod' }}" >> /home/admin/backend/.env
             echo "BACKEND_DB_NAME=${{ secrets.BACKEND_DB_NAME || 'convitecerto_prod' }}" >> /home/admin/backend/.env
-            echo "EVOLUTION_API_KEY=${{ secrets.EVOLUTION_API_KEY }}" >> /home/admin/backend/.env
-            echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> /home/admin/backend/.env
-            # Add the full DATABASE_URL for the backend here, named BACKEND_DATABASE_URL
-            echo "BACKEND_DATABASE_URL=\"postgresql://${{ secrets.DB_USER || 'user' }}:${{ secrets.DB_PASS || 'pass' }}@postgres:5432/${{ secrets.BACKEND_DB_NAME || 'convitecerto_prod' }}?schema=backend_schema\"" >> /home/admin/backend/.env
+
+            echo "" >> /home/admin/backend/.env
+            echo "# --- Evolution API Settings ---" >> /home/admin/backend/.env
+            echo "SERVER_TYPE=http" >> /home/admin/backend/.env
+            echo "SERVER_PORT=8080" >> /home/admin/backend/.env
+            echo "DATABASE_PROVIDER=postgresql" >> /home/admin/backend/.env
+            # Use DB_USER, DB_PASS, EVO_DB_NAME defined above
+            echo "DATABASE_CONNECTION_URI=\"postgresql://".${{ secrets.DB_USER || 'user' }}.":".${{ secrets.DB_PASS || 'pass' }}."@postgres:5432/".${{ secrets.EVO_DB_NAME || 'evolution_prod' }}."?schema=public\"" >> /home/admin/backend/.env
+            echo "AUTHENTICATION_API_KEY=\"${{ secrets.EVOLUTION_API_KEY }}\"" >> /home/admin/backend/.env
+            echo "WEBHOOK_GLOBAL_ENABLED=true" >> /home/admin/backend/.env
+            echo "WEBHOOK_GLOBAL_URL=\"http://backend:5000/api/whatsapp/webhook\"" >> /home/admin/backend/.env
+            echo "WEBHOOK_EVENTS_MESSAGES_UPSERT=true" >> /home/admin/backend/.env
+            echo "CACHE_REDIS_ENABLED=true" >> /home/admin/backend/.env
+            echo "CACHE_REDIS_URI=redis://redis:6379/6" >> /home/admin/backend/.env
+
+            echo "" >> /home/admin/backend/.env
+            echo "# --- Backend ConviteCerto Settings ---" >> /home/admin/backend/.env
+            echo "PORT=5000" >> /home/admin/backend/.env
+            # Use DB_USER, DB_PASS, BACKEND_DB_NAME defined above
+            echo "DATABASE_URL=\"postgresql://".${{ secrets.DB_USER || 'user' }}.":".${{ secrets.DB_PASS || 'pass' }}."@postgres:5432/".${{ secrets.BACKEND_DB_NAME || 'convitecerto_prod' }}."?schema=backend_schema\"" >> /home/admin/backend/.env
+            echo "JWT_SECRET=\"${{ secrets.JWT_SECRET }}\"" >> /home/admin/backend/.env
+            echo "EVOLUTION_API_URL=\"http://api:8080\"" >> /home/admin/backend/.env
+            echo "EVOLUTION_API_KEY=\"${{ secrets.EVOLUTION_API_KEY }}\"" >> /home/admin/backend/.env
+            echo "EVOLUTION_INSTANCE_NAME=\"myinstance\"" >> /home/admin/backend/.env
 
           EOF
 
@@ -109,20 +107,20 @@ jobs:
             fi
 
             echo "Stopping old services (if running)..."
-            # Use the final docker-compose file (ensure it's named docker-compose.yml)
+            # Use the simplified docker-compose file (ensure it's named docker-compose.yml)
             sudo docker compose -f docker-compose.yml down || echo "No services were running."
 
             echo "Building services with the latest code..."
-            # Use the final docker-compose file
+            # Use the simplified docker-compose file
             sudo docker compose -f docker-compose.yml build
 
             echo "Starting all services..."
-            # Use the final docker-compose file
+            # Use the simplified docker-compose file
             sudo docker compose -f docker-compose.yml up -d
 
             echo "Applying Prisma migrations..."
             sleep 15
-            # Use the simple exec command now, as DATABASE_URL is in the environment
+            # Use the simple exec command. DATABASE_URL should be loaded from the shared .env
             sudo docker compose -f docker-compose.yml exec -T backend npx prisma migrate deploy
 
             echo "Deployment finished."
@@ -134,19 +132,18 @@ jobs:
             cd /home/admin/backend
 
             echo "Verifying Docker containers status:"
-            # Use the final docker-compose file
+            # Use the simplified docker-compose file
             sudo docker compose -f docker-compose.yml ps
 
             echo "Verifying backend logs (last 30 lines):"
-            # Use the final docker-compose file
+            # Use the simplified docker-compose file
             sudo docker compose -f docker-compose.yml logs --tail=30 backend
 
             echo "Verifying api logs (last 30 lines):"
-            # Use the final docker-compose file
+            # Use the simplified docker-compose file
             sudo docker compose -f docker-compose.yml logs --tail=30 api
 
             echo "Verifying postgres logs (last 30 lines):"
-            # Use the final docker-compose file
+            # Use the simplified docker-compose file
             sudo docker compose -f docker-compose.yml logs --tail=30 postgres
           EOF
-
