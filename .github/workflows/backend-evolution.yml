@@ -19,15 +19,15 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.CONTABO_SSH_KEY }}
 
-      - name: Upload Project Files to Contabo VM
+      - name: Upload Project Files to Contabo VM (Corrected rsync)
         run: |
-          # Upload the simplified docker-compose.yml (ensure it's named docker-compose.yml in your repo)
-          rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no -p ${{ secrets.CONTABO_SSH_PORT || 22486 }}" \
-            --include=\'docker-compose.yml\' \
-            --include=\'Dockerfile\' \
-            --include=\'package.json\' \
-            --include=\'yarn.lock\' \
-            --include=\'README.md\' \
+          rsync -avz --delete \
+            -e "ssh -o StrictHostKeyChecking=no -p ${{ secrets.CONTABO_SSH_PORT || 22486 }}" \
+            --include=\'docker-compose.yml\'
+            --include=\'Dockerfile\'
+            --include=\'package.json\'
+            --include=\'yarn.lock\'
+            --include=\'README.md\'
             --include=\'db.js\'
             --include=\'estrutura_back.txt\'
             --include=\'prisma/***\'
