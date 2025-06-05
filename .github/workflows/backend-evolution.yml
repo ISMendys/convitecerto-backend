@@ -1,5 +1,5 @@
 
-name: Deploy Backend & Evolution API to Contabo VM (Simplified .env)
+name: Deploy Backend & Evolution API to Contabo VM (Simplified .env - Final rsync Fix)
 
 on:
   push:
@@ -19,21 +19,9 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.CONTABO_SSH_KEY }}
 
-      - name: Upload Project Files to Contabo VM (Corrected rsync)
+      - name: Upload Project Files to Contabo VM (Final rsync Fix)
         run: |
-          rsync -avz --delete \
-            -e "ssh -o StrictHostKeyChecking=no -p ${{ secrets.CONTABO_SSH_PORT || 22486 }}" \
-            --include=\'docker-compose.yml\'
-            --include=\'Dockerfile\'
-            --include=\'package.json\'
-            --include=\'yarn.lock\'
-            --include=\'README.md\'
-            --include=\'db.js\'
-            --include=\'estrutura_back.txt\'
-            --include=\'prisma/***\'
-            --include=\'src/***\'
-            --exclude=\'*\'
-            ./ admin@${{ secrets.CONTABO_HOST }}:/home/admin/backend/
+          rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no -p ${{ secrets.CONTABO_SSH_PORT || 22486 }}" --include=\'docker-compose.yml\' --include=\'Dockerfile\' --include=\'package.json\' --include=\'yarn.lock\' --include=\'README.md\' --include=\'db.js\' --include=\'estrutura_back.txt\' --include=\'prisma/***\' --include=\'src/***\' --exclude=\'*\' ./ admin@${{ secrets.CONTABO_HOST }}:/home/admin/backend/
 
       - name: Create Single .env file on Contabo VM
         run: |

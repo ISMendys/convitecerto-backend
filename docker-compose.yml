@@ -43,7 +43,7 @@ services:
       - evolution-net
     volumes:
       - .:/app
-      - /app/node_modules # Garante que node_modules não seja sobrescrito
+      - /app/node_modules
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 5s
