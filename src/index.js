@@ -44,7 +44,7 @@ const logger = winston.createLogger({
 });
 
 const corsOptions = {
-  origin: 'http://localhost:3000', // Domínio do seu frontend/docs
+  origin: 'https://convitecerto.online', // Domínio do seu frontend/docs
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
