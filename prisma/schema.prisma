@@ -11,6 +11,22 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model UserConfig {
+  id                String   @id @default(uuid())
+  theme             String   @default("light") // light, dark, system
+  notifications     Boolean  @default(true)
+  emailNotifications Boolean  @default(true)
+  interfaceDensity  String   @default("default") // compact, default, comfortable
+  fontSize          Int      @default(16)
+  language          String   @default("pt-BR")
+  dateFormat        String   @default("DD/MM/YYYY")
+  timeFormat        String   @default("24h") // 12h, 24h
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id])
+}
+
 model User {
   id        String   @id @default(uuid())
   name      String
@@ -20,6 +36,7 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   events    Event[]
+  config    UserConfig?
 }
 
 model Event {

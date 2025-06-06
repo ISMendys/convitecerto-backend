@@ -15,6 +15,7 @@ const { router: eventRoutes }    = require('./routes/event.routes');
 const { router: inviteRoutes }   = require('./routes/invite.routes');
 const { router: guestRoutes }    = require('./routes/guest.routes');
 const { router: whatsappRoutes } = require('./routes/whatsapp.routes');
+const { router: userRoutes } = require('./routes/user.routes');
 
 // 4. Inicialização do app e do Prisma
 const app    = express();
@@ -43,7 +44,7 @@ const logger = winston.createLogger({
 });
 
 const corsOptions = {
-  origin: 'https://convitecerto.online', // Domínio do seu frontend/docs
+  origin: 'http://localhost:3000', // Domínio do seu frontend/docs
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
@@ -69,12 +70,14 @@ console.log('→ eventRoutes é função?',   typeof eventRoutes);
 console.log('→ inviteRoutes é função?',  typeof inviteRoutes);
 console.log('→ guestRoutes é função?',   typeof guestRoutes);
 console.log('→ whatsappRoutes é função?',typeof whatsappRoutes);
+console.log('→ userRoutes é função?',typeof userRoutes);
 
 app.use('/api/auth',     authRoutes);
 app.use('/api/events',   eventRoutes);
 app.use('/api/invites',  inviteRoutes);
-app.use('/api/guests',   guestRoutes);
+app.use('/api/guest',   guestRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
+app.use('/api/users', userRoutes);
 
 // 1) Definição básica do OpenAPI
 const swaggerDefinition = {

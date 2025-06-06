@@ -46,6 +46,7 @@ jobs:
             # Use DB_USER, DB_PASS, EVO_DB_NAME defined above
             echo "DATABASE_CONNECTION_URI=\"postgresql://"${{ secrets.DB_USER || 'user' }}":"${{ secrets.DB_PASS || 'pass' }}"@postgres:5432/"${{ secrets.EVO_DB_NAME || 'evolution_prod' }}"?schema=public\"" >> /home/admin/backend/.env
             echo "AUTHENTICATION_API_KEY=\"${{ secrets.EVOLUTION_API_KEY }}\"" >> /home/admin/backend/.env
+            echo "CONFIG_SESSION_PHONE_VERSION=\"${{ secrets.CONFIG_SESSION_PHONE_VERSION || 2.3000.1023204200 }}\"" >> /home/admin/backend/.env
             echo "WEBHOOK_GLOBAL_ENABLED=true" >> /home/admin/backend/.env
             echo "WEBHOOK_GLOBAL_URL=\"http://backend:5000/api/whatsapp/webhook\"" >> /home/admin/backend/.env
             echo "WEBHOOK_EVENTS_MESSAGES_UPSERT=true" >> /home/admin/backend/.env

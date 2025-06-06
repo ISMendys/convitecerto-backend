@@ -56,7 +56,7 @@ const rsvpSchema = Joi.object({
  *             schema:
  *               type: array
  *               items:
- *                 $ref: "#/components/schemas/Guest"
+ *                 $ref: "#/components/schemas/Guests"
  *       403:
  *         description: Acesso negado. O usuário não tem permissão para acessar os convidados deste evento.
  *       404:
@@ -99,6 +99,151 @@ router.get("/event/:eventId", authenticate, async (req, res) => {
 
 /**
  * @swagger
+ * /api/guest/all:
+ *   get:
+ *     summary: Lista todos os convidados associados a todos os eventos do usuário autenticado.
+ *     tags: [Guest]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [pending, confirmed, declined, all]
+ *         required: false
+ *         description: Filtro opcional por status do convidado. Se não fornecido, retorna todos.
+ *       - in: query
+ *         name: eventId
+ *         schema:
+ *           type: string
+ *         required: false
+ *         description: Filtro opcional por ID do evento. Se não fornecido, retorna de todos os eventos.
+ *     responses:
+ *       200:
+ *         description: Lista de convidados recuperada com sucesso.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 total:
+ *                   type: integer
+ *                   description: Número total de convidados encontrados.
+ *                 guests:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       name:
+ *                         type: string
+ *                       email:
+ *                         type: string
+ *                       phone:
+ *                         type: string
+ *                       status:
+ *                         type: string
+ *                       plusOne:
+ *                         type: boolean
+ *                       plusOneName:
+ *                         type: string
+ *                       group:
+ *                         type: string
+ *                       whatsapp:
+ *                         type: boolean
+ *                       notes:
+ *                         type: string
+ *                       eventId:
+ *                         type: string
+ *                       eventTitle:
+ *                         type: string
+ *                         description: Título do evento ao qual o convidado pertence.
+ *                       eventDate:
+ *                         type: string
+ *                         format: date-time
+ *                         description: Data do evento ao qual o convidado pertence.
+ *       500:
+ *         description: Erro interno do servidor ao tentar listar os convidados.
+ */
+router.get("/all", authenticate, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { status, eventId } = req.query;
+    
+    // Construir o filtro para os eventos
+    const eventFilter = { userId };
+    if (eventId) {
+      eventFilter.id = eventId;
+    }
+    
+    // Buscar todos os eventos do usuário
+    const events = await req.prisma.event.findMany({
+      where: eventFilter,
+      select: {
+        id: true,
+        title: true,
+        date: true,
+      },
+    });
+    
+    if (events.length === 0) {
+      return res.status(200).json({ total: 0, guests: [] });
+    }
+    
+    // Extrair IDs dos eventos
+    const eventIds = events.map(event => event.id);
+    
+    // Construir o filtro para os convidados
+    const guestFilter = {
+      eventId: {
+        in: eventIds,
+      },
+    };
+    
+    // Adicionar filtro de status se fornecido
+    if (status && status !== 'all') {
+      guestFilter.status = status;
+    }
+    
+    // Buscar todos os convidados dos eventos do usuário
+    const guests = await req.prisma.guest.findMany({
+      where: guestFilter,
+      orderBy: [
+        { eventId: 'asc' },
+        { name: 'asc' },
+      ],
+    });
+    
+    // Criar um mapa de eventos para facilitar o acesso
+    const eventMap = {};
+    events.forEach(event => {
+      eventMap[event.id] = {
+        title: event.title,
+        date: event.date,
+      };
+    });
+    
+    // Adicionar informações do evento a cada convidado
+    const guestsWithEventInfo = guests.map(guest => ({
+      ...guest,
+      eventTitle: eventMap[guest.eventId].title,
+      eventDate: eventMap[guest.eventId].date,
+    }));
+    
+    res.status(200).json({
+      total: guestsWithEventInfo.length,
+      guests: guestsWithEventInfo,
+    });
+  } catch (error) {
+    req.logger.error("Erro ao listar convidados do usuário:", error);
+    res.status(500).json({ error: "Erro ao listar convidados do usuário" });
+  }
+});
+
+/**
+ * @swagger
  * /api/guest/{id}:
  *   get:
  *     summary: Obtém os detalhes de um convidado específico pelo seu ID.
@@ -118,7 +263,7 @@ router.get("/event/:eventId", authenticate, async (req, res) => {
  *         content:
  *           application/json:
  *             schema:
- *               $ref: "#/components/schemas/GuestWithDetails"
+ *               $ref: "#/components/schemas/GuestsWithDetails"
  *       403:
  *         description: Acesso negado. O usuário não tem permissão para acessar este convidado.
  *       404:
@@ -232,14 +377,14 @@ router.get("/:id/messages", authenticate, async (req, res) => {
  *       content:
  *         application/json:
  *           schema:
- *             $ref: "#/components/schemas/GuestInput"
+ *             $ref: "#/components/schemas/GuestsInput"
  *     responses:
  *       201:
  *         description: Convidado adicionado com sucesso.
  *         content:
  *           application/json:
  *             schema:
- *               $ref: "#/components/schemas/Guest"
+ *               $ref: "#/components/schemas/Guests"
  *       400:
  *         description: Erro de validação nos dados fornecidos ou convite inválido.
  *       403:
@@ -328,14 +473,14 @@ router.post("/", authenticate, async (req, res) => {
  *       content:
  *         application/json:
  *           schema:
- *             $ref: "#/components/schemas/GuestInput" # Reutiliza o schema de input
+ *             $ref: "#/components/schemas/GuestsInput" # Reutiliza o schema de input
  *     responses:
  *       200:
  *         description: Convidado atualizado com sucesso.
  *         content:
  *           application/json:
  *             schema:
- *               $ref: "#/components/schemas/Guest"
+ *               $ref: "#/components/schemas/Guests"
  *       400:
  *         description: Erro de validação nos dados fornecidos ou convite inválido.
  *       403:
@@ -560,45 +705,54 @@ router.post("/import", authenticate, async (req, res) => {
       return res.status(403).json({ error: "Acesso negado" });
     }
 
-    // Preparar dados para criação em lote
-    const guestData = guests.map((guest) => ({
-      name: guest.name,
-      email: guest.email || null,
-      phone: guest.phone || null,
-      status: "pending", // Status padrão para importados
-      eventId,
-      // Adicione outros campos padrão se necessário
-      whatsapp: guest.whatsapp || false,
-      plusOne: guest.plusOne || false,
-      plusOneName: guest.plusOneName || null,
-      notes: guest.notes || null,
-      group: guest.group || null,
-      imageUrl: guest.imageUrl || null,
-      inviteId: guest.inviteId || null,
-    }));
+    // Criar convidados em massa
+    const createdGuests = await Promise.all(
+      guests.map(async (guestData) => {
+        // Validação básica
+        if (!guestData.name) {
+          return null; // Pular convidados sem nome
+        }
 
-    // Criar convidados em lote
-    const createdGuests = await req.prisma.guest.createMany({
-      data: guestData,
-      skipDuplicates: true, // Evita erro se houver duplicatas (baseado nas constraints unique do schema)
+        try {
+          return await req.prisma.guest.create({
+            data: {
+              name: guestData.name,
+              email: guestData.email || null,
+              phone: guestData.phone || null,
+              status: "pending",
+              whatsapp: guestData.whatsapp || false,
+              plusOne: guestData.plusOne || false,
+              plusOneName: guestData.plusOneName || null,
+              group: guestData.group || null,
+              notes: guestData.notes || null,
+              eventId,
+            },
+          });
+        } catch (error) {
+          req.logger.error(`Erro ao criar convidado ${guestData.name}:`, error);
+          return null;
+        }
+      })
+    );
+
+    // Filtrar convidados que não foram criados com sucesso
+    const successfullyCreated = createdGuests.filter((guest) => guest !== null);
+
+    res.status(201).json({
+      count: successfullyCreated.length,
+      message: `${successfullyCreated.length} convidados importados com sucesso`,
     });
-
-    res.status(201).json({ count: createdGuests.count });
   } catch (error) {
     req.logger.error("Erro ao importar convidados:", error);
-    // Verifica se o erro é de constraint única (ex: email duplicado)
-    if (error.code === 'P2002') {
-        return res.status(409).json({ error: 'Erro de duplicidade ao importar convidados. Verifique emails ou outros campos únicos.', details: error.meta });
-    }
     res.status(500).json({ error: "Erro ao importar convidados" });
   }
 });
 
 /**
  * @swagger
- * /api/guest/rsvp/{id}:
- *   post:
- *     summary: Rota pública para um convidado confirmar ou declinar presença (RSVP).
+ * /api/guest/{id}/rsvp:
+ *   put:
+ *     summary: Atualiza o status de confirmação (RSVP) de um convidado.
  *     tags: [Guest]
  *     parameters:
  *       - in: path
@@ -606,28 +760,41 @@ router.post("/import", authenticate, async (req, res) => {
  *         schema:
  *           type: string
  *         required: true
- *         description: ID único do convidado que está respondendo.
+ *         description: ID do convidado para atualizar o RSVP.
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             $ref: "#/components/schemas/RsvpInput"
+ *             type: object
+ *             required:
+ *               - status
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [confirmed, declined]
+ *                 description: Novo status de confirmação.
+ *               plusOne:
+ *                 type: boolean
+ *                 description: Se o convidado trará acompanhante.
+ *               plusOneName:
+ *                 type: string
+ *                 description: Nome do acompanhante, se houver.
  *     responses:
  *       200:
- *         description: RSVP processado com sucesso.
+ *         description: RSVP atualizado com sucesso.
  *         content:
  *           application/json:
  *             schema:
- *               $ref: "#/components/schemas/Guest"
+ *               $ref: "#/components/schemas/Guests"
  *       400:
  *         description: Erro de validação nos dados fornecidos.
  *       404:
  *         description: Convidado não encontrado.
  *       500:
- *         description: Erro interno do servidor ao processar o RSVP.
+ *         description: Erro interno do servidor ao atualizar o RSVP.
  */
-router.post("/rsvp/:id", async (req, res) => {
+router.put("/:id/rsvp", async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -640,195 +807,55 @@ router.post("/rsvp/:id", async (req, res) => {
     const { status, plusOne, plusOneName } = value;
 
     // Verificar se o convidado existe
-    const guest = await req.prisma.guest.findUnique({
+    const existingGuest = await req.prisma.guest.findUnique({
       where: { id },
     });
 
-    if (!guest) {
+    if (!existingGuest) {
       return res.status(404).json({ error: "Convidado não encontrado" });
     }
 
-    // Atualizar status do convidado
+    // Verificar se o status está sendo alterado
+    const statusChanged = existingGuest.status !== status;
+
+    // Preparar dados para atualização
+    const updateData = {
+      status,
+    };
+
+    // Adicionar plusOne e plusOneName apenas se fornecidos
+    if (plusOne !== undefined) {
+      updateData.plusOne = plusOne;
+    }
+
+    if (plusOneName !== undefined) {
+      updateData.plusOneName = plusOneName;
+    }
+
+    // Atualizar convidado
     const updatedGuest = await req.prisma.guest.update({
       where: { id },
-      data: {
-        status,
-        plusOne: plusOne !== undefined ? plusOne : guest.plusOne,
-        plusOneName: plusOneName !== undefined ? plusOneName : guest.plusOneName,
-      },
+      data: updateData,
     });
 
-    // Registrar mensagem de confirmação/declínio
-    await req.prisma.message.create({
-      data: {
-        type: "confirmation", // Ou 'declination' dependendo do status?
-        content: `RSVP recebido: ${status}${plusOne ? ' com acompanhante' + (plusOneName ? ` (${plusOneName})` : '') : ''}`,
-        status: "received", // Status da mensagem, não do convidado
-        guestId: id,
-      },
-    });
+    // Registrar mensagem de alteração de status
+    if (statusChanged) {
+      await req.prisma.message.create({
+        data: {
+          type: "status_change",
+          content: `Status atualizado para: ${status} (pelo convidado)`,
+          status: "sent",
+          guestId: id,
+        },
+      });
+    }
 
     res.status(200).json(updatedGuest);
   } catch (error) {
-    req.logger.error("Erro ao processar RSVP:", error);
-    res.status(500).json({ error: "Erro ao processar confirmação" });
+    req.logger.error("Erro ao atualizar RSVP:", error);
+    res.status(500).json({ error: "Erro ao atualizar RSVP" });
   }
 });
-
-// Definições de Schema para Swagger (devem estar no arquivo principal ou importadas)
-/**
- * @swagger
- * components:
- *   schemas:
- *     Guest:
- *       type: object
- *       properties:
- *         id:
- *           type: string
- *           description: ID único do convidado.
- *         name:
- *           type: string
- *           description: Nome do convidado.
- *         email:
- *           type: string
- *           format: email
- *           nullable: true
- *           description: Email do convidado.
- *         phone:
- *           type: string
- *           nullable: true
- *           description: Telefone do convidado.
- *         status:
- *           type: string
- *           enum: [pending, confirmed, declined]
- *           description: Status de confirmação do convidado.
- *         whatsapp:
- *           type: boolean
- *           description: Indica se o convidado prefere contato via WhatsApp.
- *         plusOne:
- *           type: boolean
- *           description: Indica se o convidado levará um acompanhante.
- *         plusOneName:
- *           type: string
- *           nullable: true
- *           description: Nome do acompanhante, se houver.
- *         notes:
- *           type: string
- *           nullable: true
- *           description: Observações sobre o convidado.
- *         eventId:
- *           type: string
- *           description: ID do evento ao qual o convidado pertence.
- *         inviteId:
- *           type: string
- *           nullable: true
- *           description: ID do convite associado a este convidado (opcional).
- *         imageUrl:
- *           type: string
- *           nullable: true
- *           description: URL da imagem do convidado (opcional).
- *         group:
- *           type: string
- *           nullable: true
- *           description: "Grupo ao qual o convidado pertence (ex: 'Família da Noiva')."
- *         createdAt:
- *           type: string
- *           format: date-time
- *           description: Data de criação do registro do convidado.
- *         updatedAt:
- *           type: string
- *           format: date-time
- *           description: Data da última atualização do registro do convidado.
- *     GuestInput:
- *       type: object
- *       required:
- *         - name
- *         - eventId
- *       properties:
- *         name:
- *           type: string
- *         email:
- *           type: string
- *           format: email
- *           nullable: true
- *         phone:
- *           type: string
- *           nullable: true
- *         status:
- *           type: string
- *           enum: [pending, confirmed, declined]
- *           default: pending
- *         whatsapp:
- *           type: boolean
- *           default: false
- *         plusOne:
- *           type: boolean
- *           default: false
- *         plusOneName:
- *           type: string
- *           nullable: true
- *         notes:
- *           type: string
- *           nullable: true
- *         eventId:
- *           type: string
- *           description: ID do evento ao qual associar o convidado.
- *         inviteId:
- *           type: string
- *           nullable: true
- *           description: ID do convite a ser associado (opcional).
- *         imageUrl:
- *           type: string
- *           nullable: true
- *         group:
- *           type: string
- *           nullable: true
- *     GuestWithDetails:
- *       allOf:
- *         - $ref: "#/components/schemas/Guest"
- *         - type: object
- *           properties:
- *             event:
- *               $ref: "#/components/schemas/Event" # Supondo schema Event definido
- *             messages:
- *               type: array
- *               items:
- *                 $ref: "#/components/schemas/Message" # Supondo schema Message definido
- *     RsvpInput:
- *       type: object
- *       required:
- *         - status
- *       properties:
- *         status:
- *           type: string
- *           enum: [confirmed, declined]
- *           description: Novo status de confirmação.
- *         plusOne:
- *           type: boolean
- *           description: Informar se levará acompanhante (opcional na resposta).
- *         plusOneName:
- *           type: string
- *           nullable: true
- *           description: Nome do acompanhante (opcional).
- *     Message: # Schema básico para referência
- *       type: object
- *       properties:
- *         id:
- *           type: string
- *         type:
- *           type: string
- *           enum: [invite, reminder, bulk, confirmation, status_change]
- *         content:
- *           type: string
- *         status:
- *           type: string
- *           enum: [sent, received, failed]
- *         guestId:
- *           type: string
- *         createdAt:
- *           type: string
- *           format: date-time
- */
 
 module.exports = { router };
 
