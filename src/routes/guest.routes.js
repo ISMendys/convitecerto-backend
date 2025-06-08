@@ -857,5 +857,66 @@ router.put("/:id/rsvp", async (req, res) => {
   }
 });
 
+
+/**
+ * @swagger
+ * /api/guest/{id}/public:
+ *   get:
+ *     summary: Obtém os detalhes publico de um convidado específico pelo seu ID.
+ *     tags: [Guest]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: ID do convidado para buscar convidado.
+ *     responses:
+ *       200:
+ *         description: Detalhes do convidado recuperados com sucesso.
+ *       404:
+ *         description: Convidado não encontrado.
+ *       500:
+ *         description: Erro interno do servidor ao tentar obter o convidado.
+ */
+router.get("/:id/public", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const guest = await req.prisma.guest.findUnique({
+      where: {
+        id,
+      },
+      select: { // Usando 'select' para retornar apenas os dados públicos
+        id: true,
+        name: true,
+        status: true,
+        inviteId: true,
+        plusOne: true,
+        event: {
+          select: {
+            id: true,
+            title: true,
+            date: true,
+            location: true,
+            image: true,
+          }
+        }
+      }
+    });
+
+    if (!guest) {
+      return res.status(404).json({ error: "Convidado não encontrado" });
+    }
+
+    res.status(200).json(guest);
+  } catch (error) {
+    req.logger.error("Erro ao obter convidado:", error);
+    res.status(500).json({ error: "Erro ao obter convidado" });
+  }
+});
+
 module.exports = { router };
 
