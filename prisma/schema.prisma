@@ -50,7 +50,7 @@ model Event {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   userId      String
-  user        User     @relation(fields: [userId], references: [id])
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   invites     Invite[]
   notes        String?
   maxGuests    String?
@@ -72,7 +72,7 @@ model Invite {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   eventId     String
-  event       Event    @relation(fields: [eventId], references: [id])
+  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
   guests      Guest[]
 }
 
@@ -89,11 +89,11 @@ model Guest {
   notes        String?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
-  eventId      String
+  eventId      String?
   imageUrl     String?
-  event        Event     @relation(fields: [eventId], references: [id])
+  event        Event?     @relation(fields: [eventId], references: [id], onDelete: SetNull)
   inviteId     String?
-  invite       Invite?   @relation(fields: [inviteId], references: [id])
+  invite       Invite?   @relation(fields: [inviteId], references: [id], onDelete: SetNull)
   messages     Message[]
 }
 

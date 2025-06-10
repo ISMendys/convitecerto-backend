@@ -2,6 +2,40 @@ const express = require("express");
 const { authenticate } = require("./auth.routes");
 const Joi = require("joi");
 const router = express.Router();
+  
+const multer = require('multer');
+const csv = require('csv-parser');
+const fs = require('fs');
+const path = require('path');
+
+// Configuração do multer para upload de arquivos
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../uploads');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'import-' + uniqueSuffix + '.csv');
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'text/csv' || file.originalname.endsWith('.csv')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Apenas arquivos CSV são permitidos'), false);
+    }
+  },
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB
+  }
+});
 
 /**
  * @swagger
@@ -915,6 +949,259 @@ router.get("/:id/public", async (req, res) => {
   } catch (error) {
     req.logger.error("Erro ao obter convidado:", error);
     res.status(500).json({ error: "Erro ao obter convidado" });
+  }
+});
+
+/**
+ * @swagger
+ * /api/guest/import-csv:
+ *   post:
+ *     summary: Importa convidados via upload de arquivo CSV.
+ *     tags: [Guest]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - file
+ *               - eventId
+ *               - mappings
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: Arquivo CSV com os dados dos convidados.
+ *               eventId:
+ *                 type: string
+ *                 description: ID do evento para o qual importar os convidados.
+ *               mappings:
+ *                 type: string
+ *                 description: JSON string com o mapeamento das colunas do CSV.
+ *     responses:
+ *       200:
+ *         description: Importação concluída com sucesso.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 imported:
+ *                   type: integer
+ *                 skipped:
+ *                   type: integer
+ *                 errors:
+ *                   type: integer
+ *                 details:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       name:
+ *                         type: string
+ *                       status:
+ *                         type: string
+ *                       message:
+ *                         type: string
+ *       400:
+ *         description: Erro de validação ou arquivo inválido.
+ *       403:
+ *         description: Acesso negado.
+ *       404:
+ *         description: Evento não encontrado.
+ *       500:
+ *         description: Erro interno do servidor.
+ */
+router.post("/import-csv", authenticate, upload.single('file'), async (req, res) => {
+  try {
+    const { eventId, mappings } = req.body;
+    const file = req.file;
+
+    if (!file) {
+      return res.status(400).json({ error: "Arquivo CSV é obrigatório" });
+    }
+
+    if (!eventId) {
+      return res.status(400).json({ error: "ID do evento é obrigatório" });
+    }
+
+    // Verificar se o evento existe e pertence ao usuário
+    const event = await req.prisma.event.findUnique({
+      where: { id: eventId },
+    });
+
+    if (!event) {
+      return res.status(404).json({ error: "Evento não encontrado" });
+    }
+
+    if (event.userId !== req.user.id) {
+      return res.status(403).json({ error: "Acesso negado" });
+    }
+
+    // Parse do mapeamento de colunas
+    let columnMappings = {};
+    try {
+      columnMappings = JSON.parse(mappings);
+    } catch (error) {
+      return res.status(400).json({ error: "Mapeamento de colunas inválido" });
+    }
+
+    // Processar arquivo CSV
+    const results = [];
+    const importDetails = [];
+    let imported = 0;
+    let skipped = 0;
+    let errors = 0;
+
+    // Ler e processar o CSV
+    await new Promise((resolve, reject) => {
+      fs.createReadStream(file.path)
+        .pipe(csv())
+        .on('data', (row) => {
+          results.push(row);
+        })
+        .on('end', resolve)
+        .on('error', reject);
+    });
+
+    // Processar cada linha do CSV
+    for (const row of results) {
+      try {
+        // Mapear dados da linha usando o mapeamento fornecido
+        const guestData = {};
+        
+        // Mapear campos obrigatórios e opcionais
+        if (columnMappings.name && row[columnMappings.name]) {
+          guestData.name = row[columnMappings.name].trim();
+        }
+        
+        if (columnMappings.email && row[columnMappings.email]) {
+          guestData.email = row[columnMappings.email].trim();
+        }
+        
+        if (columnMappings.phone && row[columnMappings.phone]) {
+          guestData.phone = row[columnMappings.phone].trim();
+        }
+        
+        if (columnMappings.whatsapp && row[columnMappings.whatsapp]) {
+          const whatsappValue = row[columnMappings.whatsapp].toLowerCase().trim();
+          guestData.whatsapp = whatsappValue === 'true' || whatsappValue === '1' || whatsappValue === 'sim';
+        }
+        
+        if (columnMappings.group && row[columnMappings.group]) {
+          guestData.group = row[columnMappings.group].trim();
+        }
+        
+        if (columnMappings.status && row[columnMappings.status]) {
+          const statusValue = row[columnMappings.status].toLowerCase().trim();
+          if (['confirmed', 'pending', 'declined'].includes(statusValue)) {
+            guestData.status = statusValue;
+          }
+        }
+
+        // Validar dados mínimos
+        if (!guestData.name) {
+          skipped++;
+          importDetails.push({
+            name: row[Object.keys(row)[0]] || 'Linha sem nome',
+            status: 'skipped',
+            message: 'Nome é obrigatório'
+          });
+          continue;
+        }
+
+        // Verificar se já existe convidado com mesmo nome e email no evento
+        const existingGuest = await req.prisma.guest.findFirst({
+          where: {
+            eventId: eventId,
+            name: guestData.name,
+            email: guestData.email || undefined
+          }
+        });
+
+        if (existingGuest) {
+          skipped++;
+          importDetails.push({
+            name: guestData.name,
+            status: 'skipped',
+            message: 'Convidado já existe no evento'
+          });
+          continue;
+        }
+
+        // Criar convidado
+        await req.prisma.guest.create({
+          data: {
+            name: guestData.name,
+            email: guestData.email || null,
+            phone: guestData.phone || null,
+            whatsapp: guestData.whatsapp || false,
+            group: guestData.group || null,
+            status: guestData.status || 'pending',
+            plusOne: false,
+            plusOneName: null,
+            notes: null,
+            eventId: eventId,
+            inviteId: null,
+            imageUrl: null
+          }
+        });
+
+        imported++;
+        importDetails.push({
+          name: guestData.name,
+          status: 'success',
+          message: 'Importado com sucesso'
+        });
+
+      } catch (error) {
+        errors++;
+        req.logger.error(`Erro ao processar linha do CSV:`, error);
+        importDetails.push({
+          name: row[columnMappings.name] || 'Nome não identificado',
+          status: 'error',
+          message: error.message || 'Erro ao processar dados'
+        });
+      }
+    }
+
+    // Limpar arquivo temporário
+    try {
+      fs.unlinkSync(file.path);
+    } catch (error) {
+      req.logger.error('Erro ao remover arquivo temporário:', error);
+    }
+
+    // Retornar resultados
+    const response = {
+      success: errors === 0,
+      imported,
+      skipped,
+      errors,
+      details: importDetails,
+      message: `Importação concluída: ${imported} importados, ${skipped} ignorados, ${errors} erros`
+    };
+
+    res.status(200).json(response);
+
+  } catch (error) {
+    req.logger.error("Erro ao importar CSV:", error);
+    
+    // Limpar arquivo temporário em caso de erro
+    if (req.file && req.file.path) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (cleanupError) {
+        req.logger.error('Erro ao remover arquivo temporário:', cleanupError);
+      }
+    }
+    
+    res.status(500).json({ error: "Erro ao processar importação de CSV" });
   }
 });
 
