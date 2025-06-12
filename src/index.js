@@ -24,9 +24,11 @@ const PORT   = process.env.PORT || 5000;
 
 
 // ⬇️ antes de tudo: configure o body‑parser
+app.use(cors(corsOptions));
 app.use(helmet());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
+app.use(morgan('combined'));
 
 // 5. Configuração do logger (winston)
 const logger = winston.createLogger({
@@ -49,12 +51,6 @@ const corsOptions = {
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
 };
-
-// 6. Middlewares globais
-app.use(cors(corsOptions));
-app.use(helmet());
-app.use(express.json());
-app.use(morgan('combined'));
 
 // 7. Disponibiliza Prisma e Logger em req
 app.use((req, res, next) => {
