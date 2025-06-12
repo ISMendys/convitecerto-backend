@@ -22,6 +22,12 @@ const app    = express();
 const prisma = new PrismaClient();
 const PORT   = process.env.PORT || 5000;
 
+const corsOptions = {
+  origin: process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : 'https://convitecerto.online', // Domínio do seu frontend/docs
+  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+};
 
 // ⬇️ antes de tudo: configure o body‑parser
 app.use(cors(corsOptions));
@@ -45,12 +51,6 @@ const logger = winston.createLogger({
   ],
 });
 
-const corsOptions = {
-  origin: process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : 'https://convitecerto.online', // Domínio do seu frontend/docs
-  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true,
-};
 
 // 7. Disponibiliza Prisma e Logger em req
 app.use((req, res, next) => {
