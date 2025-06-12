@@ -23,6 +23,50 @@ const storage = multer.diskStorage({
   }
 });
 
+/**
+ * Limpa, valida e formata um número de telefone brasileiro.
+ * - Retorna o número limpo (ex: "48999998888") ou null se for inválido.
+ * @param {string | null | undefined} numeroTelefone
+ * @returns {string | null}
+ */
+function formatarTelefoneBrasileiro(numeroTelefone) {
+  if (!numeroTelefone || typeof numeroTelefone !== 'string') {
+    return null;
+  }
+
+  // 1. Limpa tudo que não for dígito
+  let numeros = numeroTelefone.replace(/\D/g, '');
+
+  // 2. Remove o DDI '55' do início, se houver
+  if (numeros.startsWith('55')) {
+    numeros = numeros.substring(2);
+  }
+
+  // 3. Valida o comprimento do número (DDD + número)
+  if (numeros.length < 10 || numeros.length > 11) {
+    return null; // Inválido se não tiver 10 ou 11 dígitos
+  }
+
+  // 4. Valida o DDD
+  const ddd = parseInt(numeros.substring(0, 2), 10);
+  if (ddd < 11) { // DDDs no Brasil começam em 11
+    return null;
+  }
+
+  // 5. Valida a regra do 9º dígito para celulares
+  // Se tem 11 dígitos, o terceiro (índice 2) deve ser '9'
+  if (numeros.length === 11 && numeros[2] !== '9') {
+    return null;
+  }
+  
+  // Se tem 10 dígitos, o primeiro dígito do número (índice 2) não pode ser '9'
+  if (numeros.length === 10 && numeros[2] === '9') {
+      return null;
+  }
+
+  return numeros;
+}
+
 const upload = multer({
   storage: storage,
   fileFilter: (req, file, cb) => {
@@ -468,7 +512,7 @@ router.post("/", authenticate, async (req, res) => {
         name,
         email,
         whatsapp,
-        phone,
+        phone:formatarTelefoneBrasileiro(phone),
         status,
         group,
         plusOne,
@@ -752,9 +796,9 @@ router.post("/import", authenticate, async (req, res) => {
             data: {
               name: guestData.name,
               email: guestData.email || null,
-              phone: guestData.phone || null,
+              phone: formatarTelefoneBrasileiro(guestData.phone) || null,
               status: "pending",
-              whatsapp: guestData.whatsapp || false,
+              whatsapp: guestData.whatsapp || true,
               plusOne: guestData.plusOne || false,
               plusOneName: guestData.plusOneName || null,
               group: guestData.group || null,
