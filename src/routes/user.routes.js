@@ -16,6 +16,7 @@ const axios = require("axios");
 // Esquema de validação para configurações do usuário
 const configSchema = Joi.object({
   theme: Joi.string().valid('light', 'dark', 'system').default('light'),
+  themeStyle: Joi.string().valid('blue', 'purple').default('purple'),
   notifications: Joi.boolean().default(true),
   emailNotifications: Joi.boolean().default(true),
   interfaceDensity: Joi.string().valid('compact', 'default', 'comfortable').default('default'),
@@ -60,6 +61,7 @@ router.get("/config", authenticate, async (req, res) => {
         data: {
           userId: req.user.id,
           theme: 'light',
+          themeStyle: 'purple',
           notifications: true,
           emailNotifications: true,
           interfaceDensity: 'default',
@@ -226,6 +228,10 @@ router.post("/help", authenticate, async (req, res) => {
  *           type: string
  *           enum: [light, dark, system]
  *           description: Tema da interface.
+ *         themeStyle:
+ *           type: string
+ *           enum: [blue, purple]
+ *           description: Estilo do tema da interface.
  *         notifications:
  *           type: boolean
  *           description: Se as notificações no aplicativo estão ativadas.

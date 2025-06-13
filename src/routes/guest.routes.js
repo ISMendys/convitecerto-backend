@@ -2,6 +2,7 @@ const express = require("express");
 const { authenticate } = require("./auth.routes");
 const Joi = require("joi");
 const router = express.Router();
+const notificationEvents = require('../services/notificationEvents');
   
 const multer = require('multer');
 const csv = require('csv-parser');
@@ -884,9 +885,16 @@ router.put("/:id/rsvp", async (req, res) => {
 
     const { status, plusOne, plusOneName } = value;
 
-    // Verificar se o convidado existe
+    // Verificar se o convidado existe e buscar dados do evento
     const existingGuest = await req.prisma.guest.findUnique({
       where: { id },
+      include: {
+        event: {
+          include: {
+            user: true
+          }
+        }
+      }
     });
 
     if (!existingGuest) {
@@ -895,6 +903,7 @@ router.put("/:id/rsvp", async (req, res) => {
 
     // Verificar se o status está sendo alterado
     const statusChanged = existingGuest.status !== status;
+    const previousStatus = existingGuest.status;
 
     // Preparar dados para atualização
     const updateData = {
@@ -926,6 +935,31 @@ router.put("/:id/rsvp", async (req, res) => {
           guestId: id,
         },
       });
+
+      // Emitir evento de notificação para mudança de status
+      if (existingGuest.event && existingGuest.event.user) {
+        notificationEvents.emitGuestStatusChanged({
+          guestId: id,
+          eventId: existingGuest.eventId,
+          userId: existingGuest.event.userId,
+          previousStatus: previousStatus,
+          newStatus: status,
+          guestName: existingGuest.name,
+          eventTitle: existingGuest.event.title,
+          eventDate: existingGuest.event.date,
+          eventLocation: existingGuest.event.location,
+          plusOne: updatedGuest.plusOne,
+          plusOneName: updatedGuest.plusOneName
+        });
+
+        req.logger.info('Evento de notificação emitido para mudança de status', {
+          guestId: id,
+          eventId: existingGuest.eventId,
+          userId: existingGuest.event.userId,
+          previousStatus,
+          newStatus: status
+        });
+      }
     }
 
     res.status(200).json(updatedGuest);

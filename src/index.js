@@ -8,35 +8,52 @@ const { PrismaClient } = require('@prisma/client');
 const winston       = require('winston');
 const swaggerUi  = require('swagger-ui-express');
 const swaggerJSDoc = require('swagger-jsdoc');
+const http = require('http');
+const socketIo = require('socket.io');
 
-// 3. Importação das rotas (desestruturando para pegar apenas o router)
+// Importação das rotas (desestruturando para pegar apenas o router)
 const { router: authRoutes }     = require('./routes/auth.routes');
 const { router: eventRoutes }    = require('./routes/event.routes');
 const { router: inviteRoutes }   = require('./routes/invite.routes');
 const { router: guestRoutes }    = require('./routes/guest.routes');
 const { router: whatsappRoutes } = require('./routes/whatsapp.routes');
 const { router: userRoutes } = require('./routes/user.routes');
+const { router: notificationRoutes } = require('./routes/notification.routes');
 
-// 4. Inicialização do app e do Prisma
+// Importação dos serviços de notificação
+const NotificationService = require('./services/NotificationService');
+const WebSocketNotificationProvider = require('./providers/WebSocketNotificationProvider');
+const EmailNotificationProvider = require('./providers/EmailNotificationProvider');
+
+// Inicialização do app e do Prisma
 const app    = express();
+const server = http.createServer(app);
+const io = socketIo(server, {
+  cors: {
+    origin: process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : 'https://convitecerto.online',
+    methods: ['GET', 'POST'],
+    credentials: true
+  }
+});
+
 const prisma = new PrismaClient();
 const PORT   = process.env.PORT || 5000;
 
 const corsOptions = {
-  origin: process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : 'https://convitecerto.online', // Domínio do seu frontend/docs
+  origin: process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : 'https://convitecerto.online',
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
 };
 
-// ⬇️ antes de tudo: configure o body‑parser
+// Configuração do body-parser
 app.use(cors(corsOptions));
 app.use(helmet());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use(morgan('combined'));
 
-// 5. Configuração do logger (winston)
+// Configuração do logger (winston)
 const logger = winston.createLogger({
   level: 'info',
   format: winston.format.combine(
@@ -51,37 +68,63 @@ const logger = winston.createLogger({
   ],
 });
 
+// Configuração do sistema de notificações
+const emailConfig = {
+  smtp: {
+    host: process.env.SMTP_HOST,
+    port: process.env.SMTP_PORT || 587,
+    secure: process.env.SMTP_SECURE === 'true',
+    user: process.env.SMTP_USER,
+    password: process.env.SMTP_PASSWORD
+  },
+  fromName: process.env.FROM_NAME || 'Convite Certo',
+  fromEmail: process.env.FROM_EMAIL || 'noreply@convitecerto.online',
+  frontendUrl: process.env.FRONTEND_URL || 'https://convitecerto.online'
+};
 
-// 7. Disponibiliza Prisma e Logger em req
+// Inicializar serviços de notificação
+const notificationService = new NotificationService(prisma, logger);
+const websocketProvider = new WebSocketNotificationProvider(io, logger);
+const emailProvider = new EmailNotificationProvider(emailConfig, logger);
+
+// Registrar provedores de notificação
+notificationService.registerProvider('websocket', websocketProvider);
+notificationService.registerProvider('email', emailProvider);
+
+// Disponibiliza Prisma, Logger e NotificationService em req
 app.use((req, res, next) => {
   req.prisma = prisma;
   req.logger = logger;
+  req.notificationService = notificationService;
+  req.io = io;
   next();
 });
 
-
-// 8. Montagem das rotas e logs de depuração
+// Logs de depuração
 console.log('→ authRoutes é função?',    typeof authRoutes);
 console.log('→ eventRoutes é função?',   typeof eventRoutes);
 console.log('→ inviteRoutes é função?',  typeof inviteRoutes);
 console.log('→ guestRoutes é função?',   typeof guestRoutes);
 console.log('→ whatsappRoutes é função?',typeof whatsappRoutes);
 console.log('→ userRoutes é função?',typeof userRoutes);
+console.log('→ notificationRoutes é função?',typeof notificationRoutes);
 
+// Montagem das rotas
 app.use('/api/auth',     authRoutes);
 app.use('/api/events',   eventRoutes);
 app.use('/api/invites',  inviteRoutes);
 app.use('/api/guest',   guestRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/notifications', notificationRoutes); // Nova rota de notificações
 
-// 1) Definição básica do OpenAPI
+// Definição básica do OpenAPI
 const swaggerDefinition = {
   openapi: '3.0.0',
   info: {
     title: 'API Convite Certo',
     version: '1.0.0',
-    description: 'Documentação interativa dos endpoints'
+    description: 'Documentação interativa dos endpoints com sistema de notificações'
   },
   servers: [
     {"url": "https://api.convitecerto.online", "description": "Servidor de Produção"},
@@ -102,7 +145,7 @@ const swaggerDefinition = {
   }]
 };
 
-// 2) Aponta para os seus arquivos de rotas para extrair comentários JSDoc
+// Aponta para os arquivos de rotas para extrair comentários JSDoc
 const options = {
   swaggerDefinition,
   apis: ['./src/routes/*.js']
@@ -110,20 +153,35 @@ const options = {
 
 const swaggerSpec = swaggerJSDoc(options);
 
-// 3) Monta a UI em /docs
+// Monta a UI em /docs
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-// 9. Health check
+// Health check
 app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok', timestamp: new Date() });
+  res.status(200).json({ 
+    status: 'ok', 
+    timestamp: new Date(),
+    notifications: {
+      websocketConnections: websocketProvider.getConnectedUsers().length,
+      emailProvider: 'configured'
+    }
+  });
 });
 
 app.get('/', (req, res) => {
-  res.status(200).json({ message: 'API Convite Certo 🚀' });
+  res.status(200).json({ 
+    message: 'API Convite Certo 🚀',
+    features: ['notifications', 'websocket', 'email']
+  });
 });
 
+// WebSocket status endpoint
+app.get('/api/websocket/status', (req, res) => {
+  const stats = websocketProvider.getStats();
+  res.status(200).json(stats);
+});
 
-// 10. Error handler
+// Error handlers
 app.use((err, req, res, next) => {
   logger.error(err.stack);
   res.status(500).json({
@@ -139,17 +197,28 @@ app.use((err, req, res, next) => {
   next(err);
 });
 
-// 11. Iniciar servidor
-app.listen(PORT, '0.0.0.0', () => {
+// Iniciar servidor
+server.listen(PORT, '0.0.0.0', async () => {
   logger.info(`Servidor rodando na porta ${PORT}`);
   console.log(`Servidor rodando na porta ${PORT}`);
+  console.log(`WebSocket habilitado para notificações em tempo real`);
+  
+  // Testar configuração de email
+  const emailTest = await emailProvider.testConnection();
+  if (emailTest.success) {
+    console.log('✅ Configuração de email válida');
+  } else {
+    console.log('⚠️ Problema na configuração de email:', emailTest.error);
+  }
 });
 
-// 12. Encerramento gracioso
+// Encerramento gracioso
 process.on('SIGTERM', async () => {
   logger.info('SIGTERM recebido, fechando conexões...');
   await prisma.$disconnect();
-  process.exit(0);
+  server.close(() => {
+    process.exit(0);
+  });
 });
 
 module.exports = app;
