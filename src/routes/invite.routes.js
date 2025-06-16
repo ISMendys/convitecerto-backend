@@ -416,6 +416,114 @@ router.get('/public/:id', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/invite/link-guests/{inviteId}:
+ *   post:
+ *     summary: Vincula múltiplos convidados a um convite de uma só vez.
+ *     tags: [Invite]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: O ID do convite ao qual os convidados serão vinculados.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               guestIds:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Uma lista com os IDs dos convidados a serem vinculados.
+ *             example:
+ *               guestIds: ["uuid-guest-1", "uuid-guest-2", "uuid-guest-3"]
+ *     responses:
+ *       200:
+ *         description: Convidados vinculados com sucesso.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 count:
+ *                   type: integer
+ *       400:
+ *         description: Erro de validação. A lista de `guestIds` não foi fornecida ou está vazia.
+ *       403:
+ *         description: Acesso negado. O usuário não tem permissão para modificar este convite.
+ *       404:
+ *         description: Convite não encontrado.
+ *       500:
+ *         description: Erro interno do servidor.
+ */
+router.post('/link-guests/:inviteId', authenticate, async (req, res) => {
+  try {
+    const { inviteId } = req.params;
+    const { guestIds } = req.body;
+    const userId = req.user.id;
+
+    if (!guestIds || !Array.isArray(guestIds) || guestIds.length === 0) {
+      return res.status(400).json({ error: 'A lista de "guestIds" é obrigatória e não pode estar vazia.' });
+    }
+
+    // 1. Verificar se o convite existe e pertence ao usuário (através do evento)
+    const invite = await req.prisma.invite.findFirst({
+      where: {
+        id: inviteId,
+        event: {
+          userId: userId,
+        },
+      },
+    });
+
+    if (!invite) {
+      return res.status(404).json({ error: 'Convite não encontrado ou você não tem permissão para acessá-lo.' });
+    }
+
+    // 2. A MÁGICA: Atualização em massa com a condição correta, validada pelo seu schema
+    const { count } = await req.prisma.guest.updateMany({
+      where: {
+        id: {
+          in: guestIds,
+        },
+        // A CONDIÇÃO CORRETA:
+        // "Onde o evento (event) associado ao convidado
+        // tem um userId que corresponde ao do usuário logado"
+        event: {
+          userId: userId,
+        },
+      },
+      data: {
+        inviteId: inviteId,
+      },
+    });
+
+    // 3. Responder com sucesso
+    res.status(200).json({
+      message: `${count} convidados foram vinculados com sucesso.`,
+      count: count,
+    });
+
+  } catch (error) {
+    if (error.name === 'PrismaClientValidationError') {
+      req.logger.error('Erro de validação do Prisma:', error.message);
+      return res.status(400).json({ error: 'Erro nos dados da requisição para o banco de dados.' });
+    }
+    req.logger.error('Erro ao vincular múltiplos convidados:', error);
+    res.status(500).json({ error: 'Erro ao vincular convidados' });
+  }
+});
+
 // É necessário definir os Schemas no arquivo principal do Swagger
 // Exemplo de como poderiam ser definidos:
 /**
